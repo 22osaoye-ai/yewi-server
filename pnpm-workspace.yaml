@@ -1,0 +1,13 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+allowBuilds:
+  '@prisma/engines': true
+  '@scarf/scarf': true
+  argon2: true
+  prisma: true
+  unrs-resolver: true
+
+overrides:
+  deepmerge-ts: '>=8.0.0'

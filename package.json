@@ -1,0 +1,15 @@
+{
+  "name": "yewi-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:backend": "pnpm --filter backend start:dev",
+    "dev:app": "pnpm --filter app start",
+    "dev:app:tunnel": "pnpm --filter app start --tunnel -c",
+    "dev:app:clear": "pnpm --filter app start -c",
+    "build:backend": "pnpm --filter backend build",
+    "test:backend": "pnpm --filter backend test",
+    "test:e2e": "pnpm --filter backend test:e2e",
+    "lint": "pnpm -r lint"
+  }
+}

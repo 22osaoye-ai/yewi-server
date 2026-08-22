@@ -1,0 +1,623 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum UserRole {
+  CLIENT
+  PROFESSIONAL
+  ADMIN
+}
+
+enum KycStatus {
+  UNVERIFIED
+  PENDING_REVIEW
+  VERIFIED
+  REJECTED
+}
+
+enum CategoryType {
+  GIG
+  LEAD
+  HYBRID
+}
+
+enum GigStatus {
+  DRAFT
+  PENDING_APPROVAL
+  ACTIVE
+  PAUSED
+  REJECTED
+}
+
+enum PackageTier {
+  BASIC
+  STANDARD
+  PREMIUM
+}
+
+enum LeadStatus {
+  OPEN
+  EXPIRED
+  CANCELLED
+  FULFILLED
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  WITHDRAWN
+}
+
+enum OrderType {
+  GIG_PURCHASE
+  CUSTOM_OFFER
+  LEAD_CONTRACT
+}
+
+enum OrderStatus {
+  PENDING_REQUIREMENTS
+  IN_PROGRESS
+  DELIVERED
+  REVISION_REQUESTED
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  DELIVERED
+  COMPLETED
+  DISPUTED
+}
+
+enum EscrowStatus {
+  HELD
+  RELEASED_TO_PRO
+  REFUNDED_TO_CLIENT
+  PARTIALLY_REFUNDED
+}
+
+enum TransactionType {
+  CREDIT_PURCHASE
+  LEAD_UNLOCK
+  LEAD_REFUND
+  ORDER_PAYMENT
+  ESCROW_RELEASE
+  PLATFORM_FEE
+  PAYOUT_WITHDRAWAL
+  ORDER_REFUND
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum MessageType {
+  TEXT
+  ATTACHMENT
+  CUSTOM_OFFER
+  SYSTEM_EVENT
+}
+
+enum NotificationType {
+  LEAD_MATCH
+  QUOTE_RECEIVED
+  QUOTE_ACCEPTED
+  ORDER_CREATED
+  ORDER_DELIVERED
+  REVISION_REQUESTED
+  ORDER_COMPLETED
+  DISPUTE_OPENED
+  SYSTEM_ALERT
+}
+
+// ==========================================
+// USER & IDENTITY MODELS
+// ==========================================
+
+model User {
+  id                     String    @id @default(uuid())
+  email                  String    @unique
+  passwordHash           String
+  roles                  UserRole[] @default([CLIENT])
+  isActive               Boolean   @default(true)
+  isEmailVerified        Boolean   @default(false)
+  emailVerificationToken String?
+  passwordResetToken     String?
+  passwordResetExpires   DateTime?
+  refreshTokenHash       String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  deletedAt              DateTime?
+
+  profile                Profile?
+  professionalProfile    ProfessionalProfile?
+  wallet                 Wallet?
+  clientOrders           Order[]               @relation("ClientOrders")
+  serviceRequests        ServiceRequest[]      @relation("ClientRequests")
+  reviewsWritten         Review[]              @relation("ReviewsWritten")
+  reviewsReceived        Review[]              @relation("ReviewsReceived")
+  messagesSent           Message[]             @relation("MessagesSent")
+  notifications          Notification[]
+
+  @@index([email])
+}
+
+model Profile {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName     String
+  lastName      String
+  displayName   String?
+  avatarUrl     String?
+  phoneNumber   String?
+  phoneVerified Boolean  @default(false)
+  country       String?
+  city          String?
+  postalCode    String?
+  address       String?
+  bio           String?
+  preferredLanguage String @default("es")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ProfessionalProfile {
+  id                   String          @id @default(uuid())
+  userId               String          @unique
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  businessName         String?
+  taxId                String?
+  bio                  String
+  hourlyRate           Decimal?        @db.Decimal(10, 2)
+  serviceRadiusKm      Int             @default(50)
+  latitude             Float?
+  longitude            Float?
+  address              String?
+  city                 String?
+  postalCode           String?
+  country              String?
+  kycStatus            KycStatus       @default(UNVERIFIED)
+  kycDocumentUrl       String?
+  kycRejectionReason   String?
+  badges               String[]        @default([])
+  avgRating            Float           @default(0.0)
+  totalReviews         Int             @default(0)
+  completedOrdersCount Int             @default(0)
+  responseTimeHours    Int             @default(24)
+  responseRatePercent  Int             @default(100)
+  skills               String[]        @default([])
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  categories           Category[]      @relation("ProfessionalCategories")
+  portfolioItems       PortfolioItem[]
+  gigs                 Gig[]
+  unlockedLeads        LeadUnlock[]
+  proposals            QuoteProposal[]
+  proOrders            Order[]         @relation("ProOrders")
+
+  @@index([latitude, longitude])
+  @@index([kycStatus])
+}
+
+model PortfolioItem {
+  id                    String              @id @default(uuid())
+  professionalProfileId String
+  professionalProfile   ProfessionalProfile @relation(fields: [professionalProfileId], references: [id], onDelete: Cascade)
+  title                 String
+  description           String
+  imageUrls             String[]
+  projectUrl            String?
+  tags                  String[]            @default([])
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+}
+
+// ==========================================
+// CATEGORIES & ATTRIBUTES
+// ==========================================
+
+model Category {
+  id                  String                @id @default(uuid())
+  parentId            String?
+  parent              Category?             @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  subcategories       Category[]            @relation("CategoryHierarchy")
+  name                String
+  slug                String                @unique
+  description         String?
+  icon                String?
+  bannerUrl           String?
+  type                CategoryType          @default(HYBRID)
+  formSchema          Json?                 // Dynamic JSON schema for ProntoPro questionnaires
+  baseLeadCreditCost  Int                   @default(10)
+  isActive            Boolean               @default(true)
+  sortOrder           Int                   @default(0)
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+
+  gigs                Gig[]
+  serviceRequests     ServiceRequest[]
+  professionals       ProfessionalProfile[] @relation("ProfessionalCategories")
+
+  @@index([slug])
+  @@index([parentId])
+}
+
+// ==========================================
+// FIVERR PILLAR: GIGS & PACKAGES
+// ==========================================
+
+model Gig {
+  id                   String              @id @default(uuid())
+  professionalProfileId String
+  professionalProfile  ProfessionalProfile @relation(fields: [professionalProfileId], references: [id], onDelete: Cascade)
+  categoryId           String
+  category             Category            @relation(fields: [categoryId], references: [id])
+  title                String
+  slug                 String              @unique
+  description          String
+  searchTags           String[]            @default([])
+  coverImages          String[]            @default([])
+  videoUrl             String?
+  pdfDocuments         String[]            @default([])
+  faqs                 Json?               // Array of { question, answer }
+  requirements         String[]            @default([])
+  status               GigStatus           @default(ACTIVE)
+  avgRating            Float               @default(0.0)
+  totalReviews         Int                 @default(0)
+  ordersCount          Int                 @default(0)
+  isFeatured           Boolean             @default(false)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  deletedAt            DateTime?
+
+  packages             GigPackage[]
+  extras               GigExtra[]
+  orders               Order[]
+  reviews              Review[]
+
+  @@index([slug])
+  @@index([categoryId])
+  @@index([professionalProfileId])
+  @@index([status])
+}
+
+model GigPackage {
+  id           String      @id @default(uuid())
+  gigId        String
+  gig          Gig         @relation(fields: [gigId], references: [id], onDelete: Cascade)
+  tier         PackageTier
+  name         String
+  description  String
+  price        Decimal     @db.Decimal(10, 2)
+  deliveryDays Int
+  revisions    Int         @default(1) // -1 for unlimited
+  features     Json?       // {"commercialUse": true, "sourceFiles": true, ...}
+  isPopular    Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  orders       Order[]
+
+  @@unique([gigId, tier])
+}
+
+model GigExtra {
+  id                     String   @id @default(uuid())
+  gigId                  String
+  gig                    Gig      @relation(fields: [gigId], references: [id], onDelete: Cascade)
+  title                  String
+  description            String?
+  price                  Decimal  @db.Decimal(10, 2)
+  additionalDeliveryDays Int      @default(0)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+// ==========================================
+// PRONTOPRO PILLAR: REQUESTS & LEADS
+// ==========================================
+
+model ServiceRequest {
+  id                   String          @id @default(uuid())
+  clientId             String
+  client               User            @relation("ClientRequests", fields: [clientId], references: [id], onDelete: Cascade)
+  categoryId           String
+  category             Category        @relation(fields: [categoryId], references: [id])
+  title                String
+  description          String
+  questionnaireAnswers Json            // Key-value responses matching category formSchema
+  budgetMin            Decimal?        @db.Decimal(10, 2)
+  budgetMax            Decimal?        @db.Decimal(10, 2)
+  isUrgent             Boolean         @default(false)
+  preferredDate        DateTime?
+  postalCode           String
+  city                 String
+  country              String          @default("ES")
+  address              String?
+  latitude             Float?
+  longitude            Float?
+  isRemote             Boolean         @default(false)
+  creditCost           Int             @default(10)
+  maxUnlocks           Int             @default(5)
+  unlocksCount         Int             @default(0)
+  status               LeadStatus      @default(OPEN)
+  expiresAt            DateTime
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  unlocks              LeadUnlock[]
+  proposals            QuoteProposal[]
+  orders               Order[]
+  conversations        Conversation[]
+
+  @@index([categoryId])
+  @@index([latitude, longitude])
+  @@index([status])
+}
+
+model LeadUnlock {
+  id                    String              @id @default(uuid())
+  serviceRequestId      String
+  serviceRequest        ServiceRequest      @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  professionalProfileId String
+  professionalProfile   ProfessionalProfile @relation(fields: [professionalProfileId], references: [id], onDelete: Cascade)
+  creditsSpent          Int
+  unlockedAt            DateTime            @default(now())
+
+  @@unique([serviceRequestId, professionalProfileId])
+}
+
+model QuoteProposal {
+  id                    String              @id @default(uuid())
+  serviceRequestId      String
+  serviceRequest        ServiceRequest      @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  professionalProfileId String
+  professionalProfile   ProfessionalProfile @relation(fields: [professionalProfileId], references: [id], onDelete: Cascade)
+  price                 Decimal             @db.Decimal(10, 2)
+  estimatedDays         Int
+  message               String
+  breakdown             Json?               // Breakdown of materials, labor, taxes
+  status                ProposalStatus      @default(PENDING)
+  expiresAt             DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  orders                Order[]
+
+  @@index([serviceRequestId])
+  @@index([professionalProfileId])
+}
+
+// ==========================================
+// UNIFIED ORDERS & ESCROW
+// ==========================================
+
+model Order {
+  id                     String              @id @default(uuid())
+  orderNumber            String              @unique
+  clientId               String
+  client                 User                @relation("ClientOrders", fields: [clientId], references: [id])
+  professionalProfileId  String
+  professionalProfile    ProfessionalProfile @relation("ProOrders", fields: [professionalProfileId], references: [id])
+  orderType              OrderType
+  gigId                  String?
+  gig                    Gig?                @relation(fields: [gigId], references: [id], onDelete: SetNull)
+  gigPackageId           String?
+  gigPackage             GigPackage?         @relation(fields: [gigPackageId], references: [id], onDelete: SetNull)
+  quoteProposalId        String?
+  quoteProposal          QuoteProposal?      @relation(fields: [quoteProposalId], references: [id], onDelete: SetNull)
+  serviceRequestId       String?
+  serviceRequest         ServiceRequest?     @relation(fields: [serviceRequestId], references: [id], onDelete: SetNull)
+  status                 OrderStatus         @default(PENDING_REQUIREMENTS)
+  subtotal               Decimal             @db.Decimal(10, 2)
+  platformFee            Decimal             @db.Decimal(10, 2)
+  totalAmount            Decimal             @db.Decimal(10, 2)
+  proEarnings            Decimal             @db.Decimal(10, 2)
+  escrowStatus           EscrowStatus        @default(HELD)
+  requirementsAnswers    Json?
+  deliveryDeadline       DateTime
+  autoCompletedAt        DateTime?
+  cancelledAt            DateTime?
+  cancellationReason     String?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+
+  milestones             OrderMilestone[]
+  deliveries             OrderDelivery[]
+  dispute                OrderDispute?
+  review                 Review?
+  conversation           Conversation?
+
+  @@index([orderNumber])
+  @@index([clientId])
+  @@index([professionalProfileId])
+  @@index([status])
+}
+
+model OrderMilestone {
+  id           String          @id @default(uuid())
+  orderId      String
+  order        Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  amount       Decimal         @db.Decimal(10, 2)
+  deliveryDays Int
+  status       MilestoneStatus @default(PENDING)
+  dueDate      DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model OrderDelivery {
+  id             String   @id @default(uuid())
+  orderId        String
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  deliveryNumber Int      @default(1)
+  message        String
+  attachmentUrls String[] @default([])
+  isAccepted     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model OrderDispute {
+  id                  String    @id @default(uuid())
+  orderId             String    @unique
+  order               Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  initiatorId         String
+  reason              String
+  description         String
+  evidenceUrls        String[]  @default([])
+  resolutionNotes     String?
+  resolvedByAdminId   String?
+  refundAmountClient  Decimal   @default(0.00) @db.Decimal(10, 2)
+  payoutAmountPro     Decimal   @default(0.00) @db.Decimal(10, 2)
+  status              String    @default("OPEN") // OPEN, RESOLVED, CANCELLED
+  resolvedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+// ==========================================
+// WALLET, CREDITS & AUDIT LEDGER
+// ==========================================
+
+model Wallet {
+  id                   String              @id @default(uuid())
+  userId               String              @unique
+  user                 User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creditBalance        Int                 @default(0)
+  fiatPendingBalance   Decimal             @default(0.00) @db.Decimal(10, 2)
+  fiatAvailableBalance Decimal             @default(0.00) @db.Decimal(10, 2)
+  currency             String              @default("EUR")
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  transactions         LedgerTransaction[]
+}
+
+model LedgerTransaction {
+  id                     String            @id @default(uuid())
+  walletId               String
+  wallet                 Wallet            @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  type                   TransactionType
+  amount                 Decimal           @default(0.00) @db.Decimal(10, 2)
+  creditAmount           Int?              @default(0)
+  currency               String            @default("EUR")
+  status                 TransactionStatus @default(COMPLETED)
+  stripePaymentIntentId  String?
+  stripeTransferId       String?
+  referenceId            String?           // Order ID, ServiceRequest ID, or Package ID
+  metadata               Json?
+  createdAt              DateTime          @default(now())
+
+  @@index([walletId])
+  @@index([type])
+  @@index([referenceId])
+}
+
+// ==========================================
+// REVIEWS & RATINGS
+// ==========================================
+
+model Review {
+  id                  String   @id @default(uuid())
+  orderId             String   @unique
+  order               Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  gigId               String?
+  gig                 Gig?     @relation(fields: [gigId], references: [id], onDelete: SetNull)
+  authorId            String
+  author              User     @relation("ReviewsWritten", fields: [authorId], references: [id])
+  targetUserId        String
+  targetUser          User     @relation("ReviewsReceived", fields: [targetUserId], references: [id])
+  rating              Int      @default(5) // 1 to 5
+  qualityRating       Int      @default(5)
+  communicationRating Int      @default(5)
+  deliveryRating      Int      @default(5)
+  comment             String
+  sellerReply         String?
+  sellerRepliedAt     DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([targetUserId])
+  @@index([gigId])
+}
+
+// ==========================================
+// CHAT & MESSAGING
+// ==========================================
+
+model Conversation {
+  id               String          @id @default(uuid())
+  orderId          String?         @unique
+  order            Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  serviceRequestId String?
+  serviceRequest   ServiceRequest? @relation(fields: [serviceRequestId], references: [id], onDelete: SetNull)
+  participantAId   String
+  participantBId   String
+  lastMessageAt    DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  messages         Message[]
+
+  @@index([participantAId, participantBId])
+  @@index([serviceRequestId])
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation("MessagesSent", fields: [senderId], references: [id])
+  type           MessageType  @default(TEXT)
+  content        String
+  attachments    String[]     @default([])
+  metadata       Json?
+  isRead         Boolean      @default(false)
+  readAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId])
+  @@index([senderId])
+}
+
+// ==========================================
+// NOTIFICATIONS
+// ==========================================
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  metadata  Json?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+}
