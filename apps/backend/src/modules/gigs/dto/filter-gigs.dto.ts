@@ -83,6 +83,11 @@ export class FilterGigsDto extends PaginationDto {
   @IsString()
   categoryId?: string;
 
+  @ApiPropertyOptional({ description: 'Filtrar por nombre o slug de categoría' })
+  @IsOptional()
+  @IsString()
+  category?: string;
+
   @ApiPropertyOptional({ description: 'Precio mínimo de paquete' })
   @IsOptional()
   @Type(() => Number)

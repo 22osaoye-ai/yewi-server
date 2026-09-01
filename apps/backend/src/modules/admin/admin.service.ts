@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   EscrowStatus,
@@ -12,11 +13,15 @@ import {
   TransactionType,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { RealtimeService } from '../../common/realtime/realtime.service';
 import { ResolveDisputeDto, ReviewKycDto } from './dto/review-kyc.dto';
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly realtime?: RealtimeService,
+  ) {}
 
   /**
    * Métricas y estadísticas generales de la plataforma (GMV, ingresos, usuarios)
@@ -117,7 +122,7 @@ export class AdminService {
     });
 
     // Notificar al profesional
-    await this.prisma.notification.create({
+    const notification = await this.prisma.notification.create({
       data: {
         userId: pro.userId,
         type: NotificationType.SYSTEM_ALERT,
@@ -131,6 +136,7 @@ export class AdminService {
             : `Motivo del rechazo: ${dto.rejectionReason ?? 'Documentación incompleta.'}`,
       },
     });
+    this.realtime?.emitNotification(notification);
 
     return updated;
   }
@@ -195,7 +201,7 @@ export class AdminService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // 1. Actualizar disputa
       const resolvedDispute = await tx.orderDispute.update({
         where: { id: disputeId },
@@ -264,26 +270,32 @@ export class AdminService {
       }
 
       // 5. Notificar a ambas partes
-      await tx.notification.createMany({
-        data: [
-          {
+      const notifications = await Promise.all([
+        tx.notification.create({
+          data: {
             userId: order.clientId,
             type: NotificationType.DISPUTE_OPENED,
             title: 'Disputa resuelta por administración',
             message: `Resolución del pedido ${order.orderNumber}: Reembolso de ${dto.refundAmountClient} €. Nota: ${dto.resolutionNotes}`,
             link: `/orders/${order.id}`,
           },
-          {
+        }),
+        tx.notification.create({
+          data: {
             userId: order.professionalProfile.user.id,
             type: NotificationType.DISPUTE_OPENED,
             title: 'Disputa resuelta por administración',
             message: `Resolución del pedido ${order.orderNumber}: Pago de ${dto.payoutAmountPro} €. Nota: ${dto.resolutionNotes}`,
             link: `/orders/${order.id}`,
           },
-        ],
-      });
+        }),
+      ]);
 
-      return resolvedDispute;
+      return { resolvedDispute, notifications };
     });
+    result.notifications.forEach((notification) =>
+      this.realtime?.emitNotification(notification),
+    );
+    return result.resolvedDispute;
   }
 }

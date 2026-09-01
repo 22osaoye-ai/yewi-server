@@ -1,11 +1,16 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsNotEmpty, IsString, Max, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class CreateReviewDto {
-  @ApiProperty({ example: 'ID_DEL_PEDIDO_COMPLETADO' })
+  @ApiPropertyOptional({ example: 'ID_DEL_PEDIDO_COMPLETADO' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  orderId: string;
+  orderId?: string;
+
+  @ApiPropertyOptional({ example: 'ID_DEL_PERFIL_PROFESIONAL' })
+  @IsOptional()
+  @IsString()
+  professionalProfileId?: string;
 
   @ApiProperty({
     example: 5,
@@ -18,38 +23,41 @@ export class CreateReviewDto {
   @Max(5)
   rating: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 5,
     minimum: 1,
     maximum: 5,
     description: 'Calidad del trabajo',
   })
+  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(5)
-  qualityRating: number;
+  qualityRating?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 5,
     minimum: 1,
     maximum: 5,
     description: 'Comunicación y claridad',
   })
+  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(5)
-  communicationRating: number;
+  communicationRating?: number;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 5,
     minimum: 1,
     maximum: 5,
     description: 'Puntualidad en la entrega',
   })
+  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(5)
-  deliveryRating: number;
+  deliveryRating?: number;
 
   @ApiProperty({
     example:
@@ -59,6 +67,7 @@ export class CreateReviewDto {
   @IsNotEmpty()
   comment: string;
 }
+
 
 export class ReplyReviewDto {
   @ApiProperty({

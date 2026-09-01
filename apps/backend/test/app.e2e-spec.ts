@@ -183,7 +183,7 @@ describe('Yewi Marketplace API (E2E Integration Tests)', () => {
       expect(Array.isArray(body.data)).toBe(true);
       if (body.data.length > 0) {
         const lead = body.data[0];
-        expect(lead.creditCost).toBeGreaterThan(0);
+        expect(lead.creditCost).toBe(0);
         expect(lead.client.email).toContain('***@***.com');
       }
     });

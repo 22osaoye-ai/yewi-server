@@ -11,10 +11,15 @@ import {
 } from 'class-validator';
 
 export class CreateServiceRequestDto {
-  @ApiProperty({ example: 'ID_DE_LA_CATEGORIA' })
+  @ApiPropertyOptional({ example: 'ID_DE_LA_CATEGORIA' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  categoryId: string;
+  categoryId?: string;
+
+  @ApiPropertyOptional({ example: 'Electricidad' })
+  @IsOptional()
+  @IsString()
+  category?: string;
 
   @ApiProperty({ example: 'Necesito fontanero urgente para fuga en cocina' })
   @IsString()
@@ -28,7 +33,7 @@ export class CreateServiceRequestDto {
   @IsNotEmpty()
   description: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: {
       propertyType: 'Piso',
       urgency: 'Lo antes posible',
@@ -36,8 +41,18 @@ export class CreateServiceRequestDto {
     },
     description: 'Respuestas al cuestionario dinámico de la categoría',
   })
+  @IsOptional()
   @IsObject()
-  questionnaireAnswers: Record<string, any>;
+  questionnaireAnswers?: Record<string, any> = {};
+
+  @ApiPropertyOptional({
+    example: 100.0,
+    description: 'Presupuesto estimado orientativo',
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  budgetEstimated?: number;
 
   @ApiPropertyOptional({
     example: 80.0,
@@ -70,15 +85,15 @@ export class CreateServiceRequestDto {
   @IsDateString()
   preferredDate?: string;
 
-  @ApiProperty({ example: '28001' })
+  @ApiPropertyOptional({ example: '50001' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  postalCode: string;
+  postalCode?: string = '50001';
 
-  @ApiProperty({ example: 'Madrid' })
+  @ApiPropertyOptional({ example: 'Zaragoza' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  city: string;
+  city?: string = 'Zaragoza';
 
   @ApiPropertyOptional({ example: 'España' })
   @IsOptional()

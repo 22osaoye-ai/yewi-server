@@ -51,11 +51,19 @@ export class RegisterDto {
 
   @ApiPropertyOptional({
     example: '+34600112233',
-    description: 'Teléfono de contacto',
+    description: 'Teléfono de contacto con prefijo oficial (+34, +33, +44)',
   })
   @IsOptional()
   @IsString()
   phoneNumber?: string;
+
+  @ApiPropertyOptional({
+    example: 'España',
+    description: 'País de residencia autorizado (España, Francia, Reino Unido)',
+  })
+  @IsOptional()
+  @IsString()
+  country?: string;
 
   // Datos opcionales si se registra directamente como profesional
   @ApiPropertyOptional({
@@ -103,17 +111,26 @@ export class RegisterDto {
   @IsString()
   postalCode?: string;
 
-  @ApiPropertyOptional({ example: 'Calle Alfonso I, 14', description: 'Dirección' })
+  @ApiPropertyOptional({
+    example: 'Calle Alfonso I, 14',
+    description: 'Dirección',
+  })
   @IsOptional()
   @IsString()
   address?: string;
 
-  @ApiPropertyOptional({ example: 35.0, description: 'Tarifa horaria estimada' })
+  @ApiPropertyOptional({
+    example: 35.0,
+    description: 'Tarifa horaria estimada',
+  })
   @IsOptional()
   @IsNumber()
   hourlyRate?: number;
 
-  @ApiPropertyOptional({ example: ['Fontanería', 'Electricidad'], description: 'Especialidades' })
+  @ApiPropertyOptional({
+    example: ['Fontanería', 'Electricidad'],
+    description: 'Especialidades',
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })

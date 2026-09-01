@@ -56,4 +56,14 @@ export class ReviewsController {
   async getReviewsByUser(@Param('userId') targetUserId: string) {
     return this.reviewsService.getReviewsByTargetUser(targetUserId);
   }
+
+  @Public()
+  @Get('professional/:id')
+  @ApiOperation({
+    summary: 'Ver todas las reseñas recibidas por un perfil profesional',
+  })
+  async getReviewsByProfessional(@Param('id') professionalId: string) {
+    return this.reviewsService.getReviewsByProfessional(professionalId);
+  }
 }
+

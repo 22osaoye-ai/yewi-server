@@ -94,21 +94,26 @@ export class CreateExtraDto {
 
 export class CreateGigDto {
   @ApiProperty({
-    example: 'Diseñaré un logotipo profesional y moderno para tu marca',
+    example: 'Cambio de baldosas de baño',
   })
   @IsString()
   @IsNotEmpty()
   title: string;
 
-  @ApiProperty({ example: 'diseno-logotipo-profesional-marca-123' })
+  @ApiPropertyOptional({ example: 'cambio-de-baldosas-123' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  slug: string;
+  slug?: string;
 
-  @ApiProperty({ example: 'ID_DE_LA_CATEGORIA' })
+  @ApiPropertyOptional({ example: 'ID_DE_LA_CATEGORIA' })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  categoryId: string;
+  categoryId?: string;
+
+  @ApiPropertyOptional({ example: 'Baños' })
+  @IsOptional()
+  @IsString()
+  category?: string;
 
   @ApiProperty({
     example:
@@ -118,16 +123,32 @@ export class CreateGigDto {
   @IsNotEmpty()
   description: string;
 
-  @ApiPropertyOptional({ example: ['diseño', 'branding', 'logo', 'vector'] })
+  @ApiPropertyOptional({ example: 200 })
+  @IsOptional()
+  @IsNumber()
+  price?: number;
+
+  @ApiPropertyOptional({ example: 5, description: 'Días estimados de ejecución' })
+  @IsOptional()
+  @IsInt()
+  deliveryDays?: number;
+
+  @ApiPropertyOptional({ example: 'Zaragoza' })
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @ApiPropertyOptional({ example: ['reformas', 'baldosas', 'alicatado'] })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   searchTags?: string[];
 
-  @ApiProperty({ example: ['https://images.unsplash.com/gig-cover1.jpg'] })
+  @ApiPropertyOptional({ example: ['https://images.unsplash.com/gig-cover1.jpg'] })
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  coverImages: string[];
+  coverImages?: string[];
 
   @ApiPropertyOptional({ example: 'https://youtube.com/watch?v=12345' })
   @IsOptional()
@@ -137,8 +158,8 @@ export class CreateGigDto {
   @ApiPropertyOptional({
     example: [
       {
-        question: '¿En qué formato recibiré los archivos?',
-        answer: 'Se entregan en PNG, JPG, SVG y AI vectorizado.',
+        question: '¿Incluye materiales?',
+        answer: 'Incluye material de agarre y lechada.',
       },
     ],
   })
@@ -147,26 +168,22 @@ export class CreateGigDto {
   faqs?: Array<{ question: string; answer: string }>;
 
   @ApiPropertyOptional({
-    example: [
-      'Nombre de la empresa',
-      'Sector',
-      'Colores preferidos',
-      'Referencias visuales',
-    ],
+    example: ['Superficie despejada'],
   })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   requirements?: string[];
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: [CreatePackageDto],
-    description: 'Mínimo 1 paquete (Básico, Estándar o Premium)',
+    description: 'Paquetes multinivel opcionales',
   })
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreatePackageDto)
-  packages: CreatePackageDto[];
+  packages?: CreatePackageDto[];
 
   @ApiPropertyOptional({ type: [CreateExtraDto] })
   @IsOptional()

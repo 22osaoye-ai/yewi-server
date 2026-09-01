@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Post,
@@ -15,6 +16,7 @@ import {
 } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RawResponse } from '../../common/decorators/raw-response.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -33,6 +35,7 @@ export class LeadsController {
   constructor(private readonly leadsService: LeadsService) {}
 
   @Post('requests')
+  @RawResponse()
   @ApiOperation({
     summary: 'Publicar una nueva solicitud de servicio / proyecto (Cliente)',
   })
@@ -48,6 +51,7 @@ export class LeadsController {
   }
 
   @Get('my-requests')
+  @RawResponse()
   @ApiOperation({
     summary:
       'Ver mis solicitudes publicadas con presupuestos recibidos (Cliente)',
@@ -80,11 +84,12 @@ export class LeadsController {
   @Post('requests/:id/unlock')
   @ApiOperation({
     summary:
-      'Desbloquear datos de contacto de una solicitud usando créditos (Máx. 5 profesionales)',
+      'Desbloquear datos de contacto de una solicitud con Yewi Pro (Máx. 5 profesionales)',
   })
   @ApiResponse({
     status: 200,
-    description: 'Datos de contacto completos del cliente y saldo actualizado',
+    description:
+      'Datos de contacto completos del cliente sin consumir créditos',
   })
   async unlockLead(
     @CurrentUser('id') userId: string,
@@ -109,6 +114,22 @@ export class LeadsController {
     return this.leadsService.sendQuoteProposal(userId, requestId, dto);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.PROFESSIONAL)
+  @Get('my-proposals')
+  @RawResponse()
+  @ApiOperation({
+    summary:
+      'Ver todas mis propuestas/presupuestos enviados con estado y contacto (Profesional)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Lista de presupuestos enviados por el profesional',
+  })
+  async getMyProposals(@CurrentUser('id') userId: string) {
+    return this.leadsService.getMyProposals(userId);
+  }
+
   @Post('proposals/:id/accept')
   @ApiOperation({
     summary: 'Aceptar un presupuesto y formalizar pedido con Escrow (Cliente)',
@@ -123,4 +144,30 @@ export class LeadsController {
   ) {
     return this.leadsService.acceptProposal(userId, proposalId);
   }
+
+  @Get('requests/:id')
+  @RawResponse()
+  @ApiOperation({
+    summary: 'Obtener detalle completo de una solicitud por ID',
+  })
+  @ApiResponse({ status: 200, description: 'Detalle de la solicitud' })
+  async getRequestById(
+    @CurrentUser('id') userId: string,
+    @Param('id') requestId: string,
+  ) {
+    return this.leadsService.getRequestById(userId, requestId);
+  }
+
+  @Delete('requests/:id')
+  @ApiOperation({
+    summary: 'Eliminar una solicitud de servicio propia (Cliente)',
+  })
+  @ApiResponse({ status: 200, description: 'Solicitud eliminada con éxito' })
+  async deleteServiceRequest(
+    @CurrentUser('id') userId: string,
+    @Param('id') requestId: string,
+  ) {
+    return this.leadsService.deleteServiceRequest(userId, requestId);
+  }
 }
+

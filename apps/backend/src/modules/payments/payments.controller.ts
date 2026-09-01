@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Headers,
   HttpCode,
   HttpStatus,
@@ -45,6 +46,70 @@ export class PaymentsController {
     @Body() dto: CreatePaymentIntentDto,
   ) {
     return this.paymentsService.createPaymentIntent(userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Get('subscription')
+  @ApiOperation({
+    summary: 'Consultar estado actual de suscripción Yewi Pro',
+  })
+  async getSubscriptionStatus(@CurrentUser('id') userId: string) {
+    return this.paymentsService.getSubscriptionStatus(userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Post('subscription/sync')
+  @ApiOperation({
+    summary: 'Sincronizar y forzar comprobación en tiempo real con Stripe',
+  })
+  async syncSubscription(@CurrentUser('id') userId: string) {
+    return this.paymentsService.syncSubscriptionWithStripe(userId);
+  }
+
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Post('subscription/cancel')
+  @ApiOperation({
+    summary: 'Cancelar renovación automática de suscripción Pro in-app',
+  })
+  async cancelSubscriptionAutoRenew(@CurrentUser('id') userId: string) {
+    return this.paymentsService.cancelSubscriptionAutoRenew(userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Post('subscription/resume')
+  @ApiOperation({
+    summary: 'Reanudar renovación automática de suscripción Pro in-app',
+  })
+  async resumeSubscriptionAutoRenew(@CurrentUser('id') userId: string) {
+    return this.paymentsService.resumeSubscriptionAutoRenew(userId);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Post('subscription/checkout')
+  @ApiOperation({
+    summary:
+      'Crear sesión de Stripe Checkout para suscripción mensual Yewi Pro (9,99 €/mes)',
+  })
+  async createSubscriptionCheckout(@CurrentUser('id') userId: string) {
+    return this.paymentsService.createSubscriptionCheckout(userId);
+  }
+
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Post('subscription/portal')
+  @ApiOperation({
+    summary:
+      'Crear sesión del Stripe Customer Portal para gestionar/cancelar suscripción',
+  })
+  async createCustomerPortalSession(@CurrentUser('id') userId: string) {
+    return this.paymentsService.createCustomerPortalSession(userId);
   }
 
   @Public()

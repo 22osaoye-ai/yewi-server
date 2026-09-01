@@ -64,6 +64,16 @@ export class UpdateProfessionalProfileDto {
   @IsString()
   country?: string;
 
+  @ApiPropertyOptional({ example: 'Aragón' })
+  @IsOptional()
+  @IsString()
+  region?: string;
+
+  @ApiPropertyOptional({ example: 'Zaragoza' })
+  @IsOptional()
+  @IsString()
+  province?: string;
+
   @ApiPropertyOptional({ example: 'Calle Alcalá 45' })
   @IsOptional()
   @IsString()

@@ -33,4 +33,25 @@ export class NotificationsService {
       data: { isRead: true },
     });
   }
+
+  async deleteNotification(userId: string, id: string) {
+    const result = await this.prisma.notification.deleteMany({
+      where: { id, userId },
+    });
+    return { success: true, count: result.count };
+  }
+
+  async deleteNotifications(userId: string, ids?: string[]) {
+    if (ids && ids.length > 0) {
+      const result = await this.prisma.notification.deleteMany({
+        where: { id: { in: ids }, userId },
+      });
+      return { success: true, count: result.count };
+    }
+    const result = await this.prisma.notification.deleteMany({
+      where: { userId },
+    });
+    return { success: true, count: result.count };
+  }
 }
+

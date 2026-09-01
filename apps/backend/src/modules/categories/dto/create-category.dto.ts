@@ -89,7 +89,7 @@ export class CreateCategoryDto {
   @ApiPropertyOptional({
     example: 10,
     description:
-      'Coste base en créditos para desbloquear leads de esta categoría',
+      'Coste base histórico de la categoría; el desbloqueo de leads requiere Yewi Pro y no consume créditos',
   })
   @IsOptional()
   @IsInt()

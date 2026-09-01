@@ -3,11 +3,20 @@ packages:
   - 'packages/*'
 
 allowBuilds:
+  '@firebase/util': true
   '@prisma/engines': true
   '@scarf/scarf': true
   argon2: true
+  browser-tabs-lock: true
+  bufferutil: true
+  core-js: true
   prisma: true
+  protobufjs: true
+  stream-chat: true
   unrs-resolver: true
+  utf-8-validate: true
+
+nodeLinker: hoisted
 
 overrides:
   deepmerge-ts: '>=8.0.0'

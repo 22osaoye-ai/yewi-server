@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Delete, Param, Body, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -6,8 +6,10 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { RawResponse } from '../../common/decorators/raw-response.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { NotificationsService } from './notifications.service';
+import { DeleteNotificationsDto } from './dto/delete-notifications.dto';
 
 @ApiTags('Notifications (Notificaciones & Alertas)')
 @UseGuards(JwtAuthGuard)
@@ -17,6 +19,7 @@ export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
+  @RawResponse()
   @ApiOperation({ summary: 'Obtener mis notificaciones' })
   @ApiResponse({
     status: 200,
@@ -27,9 +30,16 @@ export class NotificationsController {
   }
 
   @Get('unread-count')
+  @RawResponse()
   @ApiOperation({ summary: 'Obtener número de notificaciones no leídas' })
   async getUnreadCount(@CurrentUser('id') userId: string) {
     return this.notificationsService.getUnreadCount(userId);
+  }
+
+  @Patch('read-all')
+  @ApiOperation({ summary: 'Marcar todas las notificaciones como leídas' })
+  async markAllAsRead(@CurrentUser('id') userId: string) {
+    return this.notificationsService.markAllAsRead(userId);
   }
 
   @Patch(':id/read')
@@ -38,9 +48,28 @@ export class NotificationsController {
     return this.notificationsService.markAsRead(userId, id);
   }
 
-  @Patch('read-all')
-  @ApiOperation({ summary: 'Marcar todas las notificaciones como leídas' })
-  async markAllAsRead(@CurrentUser('id') userId: string) {
-    return this.notificationsService.markAllAsRead(userId);
+  @Delete('batch')
+  @ApiOperation({ summary: 'Eliminar múltiples notificaciones por lote' })
+  async deleteBatch(
+    @CurrentUser('id') userId: string,
+    @Body() dto: DeleteNotificationsDto,
+  ) {
+    return this.notificationsService.deleteNotifications(userId, dto.ids);
+  }
+
+  @Delete('clear-all')
+  @ApiOperation({ summary: 'Eliminar todas las notificaciones' })
+  async clearAll(@CurrentUser('id') userId: string) {
+    return this.notificationsService.deleteNotifications(userId);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Eliminar una notificación individual' })
+  async deleteNotification(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.notificationsService.deleteNotification(userId, id);
   }
 }
+

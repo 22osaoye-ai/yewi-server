@@ -188,6 +188,12 @@ export class WalletService {
       );
     }
 
+    await this.paymentsService.verifyPaymentIntent(
+      dto.paymentIntentId,
+      userId,
+      Number(pendingTx.amount),
+    );
+
     // Ejecutar acreditación atómica
     return this.prisma.$transaction(async (tx) => {
       // 1. Marcar transacción como COMPLETADA
@@ -223,15 +229,7 @@ export class WalletService {
    * Compra de créditos pasando obligatoriamente por pasarela de pagos
    */
   async buyCredits(userId: string, dto: BuyCreditsDto) {
-    // 1. Iniciar PaymentIntent
-    const intent = await this.createCreditPaymentIntent(userId, {
-      pack: dto.pack,
-    });
-
-    // 2. Confirmar transacción de pago
-    return this.confirmCreditPayment(userId, {
-      paymentIntentId: intent.paymentIntentId,
-    });
+    return this.createCreditPaymentIntent(userId, { pack: dto.pack });
   }
 
   /**

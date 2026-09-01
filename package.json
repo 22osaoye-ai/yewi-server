@@ -5,11 +5,22 @@
   "scripts": {
     "dev:backend": "pnpm --filter backend start:dev",
     "dev:app": "pnpm --filter app start",
+    "dev:app:devclient": "pnpm --filter app start:dev-client",
+    "dev:app:web": "pnpm --filter app web",
     "dev:app:tunnel": "pnpm --filter app start --tunnel -c",
     "dev:app:clear": "pnpm --filter app start -c",
     "build:backend": "pnpm --filter backend build",
     "test:backend": "pnpm --filter backend test",
     "test:e2e": "pnpm --filter backend test:e2e",
-    "lint": "pnpm -r lint"
+    "lint": "pnpm -r lint",
+    "android": "expo run:android",
+    "ios": "expo run:ios"
+  },
+  "dependencies": {
+    "@prisma/client": "7.9.1",
+    "prisma": "7.9.1",
+    "expo": "~54.0.37",
+    "react": "19.1.0",
+    "react-native": "0.81.5"
   }
 }

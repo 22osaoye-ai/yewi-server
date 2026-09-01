@@ -68,7 +68,7 @@ describe('Concurrency Stress & Race Condition Test (Zaragoza Scale Proof)', () =
         postalCode: '50001',
         city: 'Zaragoza',
         country: 'ES',
-        creditCost: 10,
+        creditCost: 0,
         maxUnlocks: 3,
         unlocksCount: 0,
         expiresAt: new Date(Date.now() + 86400000),
@@ -85,6 +85,7 @@ describe('Concurrency Stress & Race Condition Test (Zaragoza Scale Proof)', () =
         data: {
           email,
           passwordHash,
+          isPro: true,
           roles: ['PROFESSIONAL', 'CLIENT'],
           profile: {
             create: {
@@ -149,15 +150,21 @@ describe('Concurrency Stress & Race Condition Test (Zaragoza Scale Proof)', () =
     });
     expect(totalUnlocksInDb).toBe(3);
 
+    const unlockLedgerEntries = await prisma.ledgerTransaction.count({
+      where: {
+        referenceId: serviceRequest.id,
+        type: 'LEAD_UNLOCK',
+      },
+    });
+    expect(unlockLedgerEntries).toBe(0);
+
     // 7. Verificar saldos de créditos
     const wallets = await prisma.wallet.findMany({
       where: { userId: { in: proIds } },
     });
 
-    const deductedWallets = wallets.filter((w) => w.creditBalance === 40);
     const untouchedWallets = wallets.filter((w) => w.creditBalance === 50);
 
-    expect(deductedWallets.length).toBe(3);
-    expect(untouchedWallets.length).toBe(5);
+    expect(untouchedWallets.length).toBe(8);
   });
 });

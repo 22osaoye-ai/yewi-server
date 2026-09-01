@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "710809213650",
+    "project_id": "yewi-e6bcb",
+    "storage_bucket": "yewi-e6bcb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:710809213650:android:636c75ed75716c3eae6b0b",
+        "android_client_info": {
+          "package_name": "com.yewi.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "710809213650-o3ba03a294dvfsqhfiiojgldr58jfmt4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.yewi.app",
+            "certificate_hash": "4c9653ca2e6b523c4ce14bb41a679e42abf5dc81"
+          }
+        },
+        {
+          "client_id": "710809213650-a0k8mrv87runra4trlj1c3vuuqbijl1n.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBoAdUqK5lqxz4J8TwtwzHU05i8YgyCM7M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "710809213650-a0k8mrv87runra4trlj1c3vuuqbijl1n.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

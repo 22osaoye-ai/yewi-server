@@ -3,12 +3,19 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import compression from 'compression';
+import { json, urlencoded } from 'express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, {
+    bodyParser: false,
+  });
+
+  // Configurar límite de payload JSON y urlencoded (25MB para fotos de perfil, avatares y portafolio en Base64)
+  app.use(json({ limit: '25mb' }));
+  app.use(urlencoded({ extended: true, limit: '25mb' }));
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('port') ?? 3000;
@@ -54,7 +61,7 @@ async function bootstrap() {
       `API RESTful & WebSockets de Alto Rendimiento para la Plataforma Yewi.
       
       Combina:
-      - **Modelo ProntoPro**: Solicitudes geo-localizadas, matching de profesionales con cálculo de radio, desbloqueo de leads con saldo de créditos y cotizaciones.
+      - **Modelo ProntoPro**: Solicitudes geo-localizadas, matching de profesionales con cálculo de radio, desbloqueo de leads incluido en Yewi Pro y cotizaciones.
       - **Modelo Fiverr**: Catálogo de servicios empaquetados (Gigs) con niveles Básico, Estándar y Premium, pedidos directos, entregas, revisiones y Escrow.
       - **Centro Financiero & Seguridad**: Billetera de créditos y saldo fiat, Stripe Connect / PaymentIntents, Escrow con retención y liberación, roles RBAC y filtros anti-fraude.`,
     )
@@ -92,7 +99,7 @@ async function bootstrap() {
     )
     .addTag(
       'Leads & Service Requests (Solicitudes ProntoPro, Matching & Presupuestos)',
-      'Publicación de requerimientos, matching por proximidad, desbloqueo con créditos y presupuestos',
+      'Publicación de requerimientos, matching por proximidad, desbloqueo incluido en Yewi Pro y presupuestos',
     )
     .addTag(
       'Orders (Gestión de Pedidos, Entregas, Revisiones & Escrow)',
@@ -100,7 +107,7 @@ async function bootstrap() {
     )
     .addTag(
       'Wallet & Credits (Billetera, Recarga de Créditos & Retiros)',
-      'Monedero de créditos para leads y saldo fiat',
+      'Monedero de créditos para compras y saldo fiat',
     )
     .addTag(
       'Payments (Pasarela Stripe, Intenciones de Pago & Webhooks)',

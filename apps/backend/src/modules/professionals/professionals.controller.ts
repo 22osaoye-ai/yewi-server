@@ -8,6 +8,7 @@ import {
   Put,
   Query,
   UseGuards,
+  ParseFloatPipe,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -24,12 +25,26 @@ import {
   SubmitKycDto,
   UpdateProfessionalProfileDto,
 } from './dto/update-professional-profile.dto';
+import { FilterProfessionalsDto } from './dto/filter-professionals.dto';
 import { ProfessionalsService } from './professionals.service';
 
 @ApiTags('Professionals (Perfiles Pro, Portafolio, Ubicación & KYC)')
 @Controller('professionals')
 export class ProfessionalsController {
   constructor(private readonly professionalsService: ProfessionalsService) {}
+
+  @Public()
+  @Get()
+  @ApiOperation({
+    summary: 'Buscar y filtrar profesionales por texto, categoría o localidad',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Listado de profesionales encontrados con métricas reales',
+  })
+  async searchProfessionals(@Query() dto: FilterProfessionalsDto) {
+    return this.professionalsService.searchProfessionals(dto);
+  }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -63,6 +78,7 @@ export class ProfessionalsController {
 
   @Public()
   @Get('nearby')
+
   @ApiOperation({
     summary: 'Buscar profesionales cercanos por coordenadas geográficas',
   })
@@ -71,17 +87,12 @@ export class ProfessionalsController {
   @ApiQuery({ name: 'categoryId', required: false, type: String })
   @ApiQuery({ name: 'skill', required: false, type: String })
   async findNearby(
-    @Query('lat') lat: string,
-    @Query('lon') lon: string,
+    @Query('lat', ParseFloatPipe) lat: number,
+    @Query('lon', ParseFloatPipe) lon: number,
     @Query('categoryId') categoryId?: string,
     @Query('skill') skill?: string,
   ) {
-    return this.professionalsService.findNearby(
-      parseFloat(lat),
-      parseFloat(lon),
-      categoryId,
-      skill,
-    );
+    return this.professionalsService.findNearby(lat, lon, categoryId, skill);
   }
 
   @Public()
@@ -109,7 +120,20 @@ export class ProfessionalsController {
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @Post('me/portfolio/upload')
+  @ApiOperation({ summary: 'Subir imagen de portafolio a Cloudinary' })
+  @ApiResponse({ status: 200, description: 'URL segura de Cloudinary' })
+  async uploadPortfolioImage(
+    @CurrentUser('id') userId: string,
+    @Body('image') image: string,
+  ) {
+    return this.professionalsService.uploadPortfolioImage(userId, image);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @Delete('me/portfolio/:id')
+
   @ApiOperation({ summary: 'Eliminar un proyecto del portafolio' })
   async deletePortfolioItem(
     @CurrentUser('id') userId: string,

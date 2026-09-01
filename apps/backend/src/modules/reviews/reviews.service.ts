@@ -14,67 +14,108 @@ export class ReviewsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Crear reseña verificada para un pedido completado
+   * Crear reseña verificada para un pedido o perfil profesional
    */
   async createReview(userId: string, dto: CreateReviewDto) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: dto.orderId },
-      include: {
-        professionalProfile: true,
-        review: true,
-      },
-    });
+    let order: any = null;
+    let targetUserId: string;
+    let professionalProfileId: string;
+    let gigId: string | null = null;
 
-    if (!order) {
-      throw new NotFoundException('Pedido no encontrado');
-    }
+    if (dto.orderId) {
+      order = await this.prisma.order.findUnique({
+        where: { id: dto.orderId },
+        include: {
+          professionalProfile: true,
+          review: true,
+        },
+      });
 
-    if (order.clientId !== userId) {
-      throw new ForbiddenException(
-        'Solo el comprador puede dejar una reseña sobre el pedido',
-      );
-    }
+      if (!order) {
+        throw new NotFoundException('Pedido no encontrado');
+      }
 
-    if (order.status !== OrderStatus.COMPLETED) {
+      if (order.clientId !== userId) {
+        throw new ForbiddenException(
+          'Solo el comprador puede dejar una reseña sobre el pedido',
+        );
+      }
+
+      if (order.status !== OrderStatus.COMPLETED) {
+        throw new BadRequestException(
+          'Solo se pueden valorar pedidos que hayan sido completados',
+        );
+      }
+
+      if (order.review) {
+        throw new ConflictException('Ya has valorado este pedido');
+      }
+
+      targetUserId = order.professionalProfile.userId;
+      professionalProfileId = order.professionalProfileId;
+      gigId = order.gigId;
+    } else if (dto.professionalProfileId) {
+      const pro = await this.prisma.professionalProfile.findUnique({
+        where: { id: dto.professionalProfileId },
+        select: { id: true, userId: true },
+      });
+
+      if (!pro) {
+        throw new NotFoundException('Perfil profesional no encontrado');
+      }
+
+      if (pro.userId === userId) {
+        throw new BadRequestException('No puedes valorarte a ti mismo');
+      }
+
+      targetUserId = pro.userId;
+      professionalProfileId = pro.id;
+    } else {
       throw new BadRequestException(
-        'Solo se pueden valorar pedidos que hayan sido completados',
+        'Debes indicar un pedido (orderId) o un perfil profesional (professionalProfileId)',
       );
-    }
-
-    if (order.review) {
-      throw new ConflictException('Ya has valorado este pedido');
     }
 
     return this.prisma.$transaction(async (tx) => {
       const review = await tx.review.create({
         data: {
-          orderId: order.id,
-          gigId: order.gigId,
+          orderId: order ? order.id : null,
+          professionalProfileId,
+          gigId,
           authorId: userId,
-          targetUserId: order.professionalProfile.userId,
+          targetUserId,
           rating: dto.rating,
-          qualityRating: dto.qualityRating,
-          communicationRating: dto.communicationRating,
-          deliveryRating: dto.deliveryRating,
+          qualityRating: dto.qualityRating ?? dto.rating,
+          communicationRating: dto.communicationRating ?? dto.rating,
+          deliveryRating: dto.deliveryRating ?? dto.rating,
           comment: dto.comment,
+        },
+        include: {
+          author: {
+            select: {
+              profile: true,
+            },
+          },
         },
       });
 
       // Recalcular métricas del profesional
       const proReviews = await tx.review.findMany({
-        where: { targetUserId: order.professionalProfile.userId },
+        where: { targetUserId },
         select: { rating: true },
       });
 
       const totalReviews = proReviews.length;
       const avgRating =
-        Math.round(
-          (proReviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews) *
-            10,
-        ) / 10;
+        totalReviews > 0
+          ? Math.round(
+              (proReviews.reduce((sum, r) => sum + r.rating, 0) / totalReviews) *
+                10,
+            ) / 10
+          : 0.0;
 
       await tx.professionalProfile.update({
-        where: { id: order.professionalProfileId },
+        where: { id: professionalProfileId },
         data: {
           avgRating,
           totalReviews,
@@ -82,21 +123,23 @@ export class ReviewsService {
       });
 
       // Si el pedido pertenecía a un Gig, recalcular rating del Gig
-      if (order.gigId) {
+      if (gigId) {
         const gigReviews = await tx.review.findMany({
-          where: { gigId: order.gigId },
+          where: { gigId },
           select: { rating: true },
         });
 
         const gigAvgRating =
-          Math.round(
-            (gigReviews.reduce((sum, r) => sum + r.rating, 0) /
-              gigReviews.length) *
-              10,
-          ) / 10;
+          gigReviews.length > 0
+            ? Math.round(
+                (gigReviews.reduce((sum, r) => sum + r.rating, 0) /
+                  gigReviews.length) *
+                  10,
+              ) / 10
+            : 0.0;
 
         await tx.gig.update({
-          where: { id: order.gigId },
+          where: { id: gigId },
           data: {
             avgRating: gigAvgRating,
             totalReviews: gigReviews.length,
@@ -136,7 +179,7 @@ export class ReviewsService {
   }
 
   /**
-   * Obtener reseñas de un profesional
+   * Obtener reseñas de un profesional por userId
    */
   async getReviewsByTargetUser(targetUserId: string) {
     return this.prisma.review.findMany({
@@ -150,5 +193,21 @@ export class ReviewsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * Obtener reseñas de un profesional por professionalProfileId
+   */
+  async getReviewsByProfessional(professionalId: string) {
+    const pro = await this.prisma.professionalProfile.findUnique({
+      where: { id: professionalId },
+      select: { userId: true },
+    });
+
+    if (!pro) {
+      throw new NotFoundException('Perfil profesional no encontrado');
+    }
+
+    return this.getReviewsByTargetUser(pro.userId);
   }
 }

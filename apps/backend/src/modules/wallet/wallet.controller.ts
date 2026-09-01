@@ -85,12 +85,12 @@ export class WalletController {
   @ApiBearerAuth()
   @Post('buy-credits')
   @ApiOperation({
-    summary:
-      'Comprar paquete de créditos procesando el pago en pasarela',
+    summary: 'Comprar paquete de créditos procesando el pago en pasarela',
   })
   @ApiResponse({
     status: 200,
-    description: 'Créditos acreditados en la billetera tras pago verificado',
+    description:
+      'PaymentIntent creado; los créditos se acreditan tras confirmar el pago',
   })
   async buyCredits(
     @CurrentUser('id') userId: string,

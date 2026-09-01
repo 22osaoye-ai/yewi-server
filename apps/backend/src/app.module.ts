@@ -22,9 +22,12 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { OrdersModule } from './modules/orders/orders.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { ProfessionalsModule } from './modules/professionals/professionals.module';
+import { PromotionsModule } from './modules/promotions/promotions.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { UsersModule } from './modules/users/users.module';
 import { WalletModule } from './modules/wallet/wallet.module';
+import { RealtimeModule } from './common/realtime/realtime.module';
+import { StatusesModule } from './modules/statuses/statuses.module';
 
 @Module({
   imports: [
@@ -50,6 +53,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
     // 3. Base de Datos y Caché Global en Redis
     PrismaModule,
     CacheModule,
+    RealtimeModule,
 
     // 4. Módulo de Diagnóstico y Salud
     HealthModule,
@@ -58,6 +62,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
     AuthModule,
     UsersModule,
     ProfessionalsModule,
+    PromotionsModule,
     CategoriesModule,
     GigsModule,
     LeadsModule,
@@ -67,6 +72,7 @@ import { WalletModule } from './modules/wallet/wallet.module';
     ChatModule,
     ReviewsModule,
     NotificationsModule,
+    StatusesModule,
     AdminModule,
   ],
   providers: [

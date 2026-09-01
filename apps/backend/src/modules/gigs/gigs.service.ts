@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { GigStatus, Prisma } from '@prisma/client';
+import { GigStatus, PackageTier, Prisma } from '@prisma/client';
 import { PaginatedResult } from '../../common/dto/pagination.dto';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateGigDto } from './dto/create-gig.dto';
@@ -16,7 +16,7 @@ export class GigsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Crear un nuevo Gig con paquetes y extras (Fiverr Style)
+   * Crear un nuevo Gig / Proyecto con paquetes o tarifa directa
    */
   async create(userId: string, dto: CreateGigDto) {
     const pro = await this.prisma.professionalProfile.findUnique({
@@ -25,30 +25,95 @@ export class GigsService {
 
     if (!pro) {
       throw new ForbiddenException(
-        'Debes tener un perfil profesional para publicar gigs',
+        'Debes tener un perfil profesional para publicar proyectos y servicios',
       );
     }
 
+    // 1. Resolve Category
+    let targetCategoryId = dto.categoryId;
+    if (!targetCategoryId && dto.category) {
+      const cat = await this.prisma.category.findFirst({
+        where: {
+          OR: [
+            { name: { equals: dto.category, mode: 'insensitive' } },
+            { slug: dto.category.toLowerCase().replace(/[^a-z0-9]+/g, '-') },
+          ],
+        },
+      });
+      if (cat) {
+        targetCategoryId = cat.id;
+      }
+    }
+
+    if (!targetCategoryId) {
+      const firstCat = await this.prisma.category.findFirst({
+        where: { isActive: true },
+      });
+      if (firstCat) {
+        targetCategoryId = firstCat.id;
+      } else {
+        const newCat = await this.prisma.category.create({
+          data: {
+            name: dto.category || 'General',
+            slug: `${(dto.category || 'general')
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`,
+          },
+        });
+        targetCategoryId = newCat.id;
+      }
+    }
+
+    // 2. Resolve Slug
+    const baseSlug = (dto.title || 'proyecto')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+    const slug = dto.slug || `${baseSlug}-${Date.now().toString(36)}`;
+
     const existingSlug = await this.prisma.gig.findUnique({
-      where: { slug: dto.slug },
+      where: { slug },
     });
 
     if (existingSlug) {
-      throw new ConflictException('El slug del gig ya existe');
+      throw new ConflictException('El slug del proyecto ya existe');
     }
 
-    if (!dto.packages || dto.packages.length === 0) {
-      throw new BadRequestException(
-        'Debes incluir al menos un paquete (Básico)',
-      );
-    }
+    // 3. Resolve Packages
+    const packages =
+      dto.packages && dto.packages.length > 0
+        ? dto.packages
+        : [
+            {
+              tier: PackageTier.BASIC,
+              name: 'Servicio / Proyecto',
+              description: dto.description || dto.title,
+              price: Number(dto.price || 50),
+              deliveryDays: Number(dto.deliveryDays || 3),
+              revisions: 1,
+            },
+          ];
 
-    const { packages, extras, ...gigData } = dto;
+    const {
+      packages: _p,
+      extras,
+      category: _c,
+      categoryId: _cid,
+      price: _pr,
+      deliveryDays: _dd,
+      city: _ct,
+      ...gigData
+    } = dto;
 
     return this.prisma.$transaction(async (tx) => {
       const gig = await tx.gig.create({
         data: {
           ...gigData,
+          slug,
+          categoryId: targetCategoryId,
+          coverImages: dto.coverImages || [],
           professionalProfileId: pro.id,
           status: GigStatus.ACTIVE,
         },
@@ -84,7 +149,7 @@ export class GigsService {
           category: true,
           professionalProfile: {
             include: {
-              user: { select: { profile: true } },
+              user: { select: { id: true, profile: true } },
             },
           },
         },
@@ -95,60 +160,115 @@ export class GigsService {
   /**
    * Buscar y listar Gigs con filtros y paginación
    */
+  /**
+   * Buscar y listar Gigs con filtros y paginación
+   */
   async findAll(filter: FilterGigsDto): Promise<PaginatedResult<any>> {
     const where: Prisma.GigWhereInput = {
       status: GigStatus.ACTIVE,
       deletedAt: null,
     };
 
+    const andConditions: Prisma.GigWhereInput[] = [];
+
     if (filter.categoryId) {
-      where.categoryId = filter.categoryId;
+      andConditions.push({ categoryId: filter.categoryId });
+    }
+
+    if (filter.category) {
+      const catList = filter.category
+        .split(',')
+        .map((c) => c.trim())
+        .filter(Boolean);
+
+      if (catList.length > 0) {
+        const catOrs: Prisma.GigWhereInput[] = [];
+        for (const cat of catList) {
+          catOrs.push(
+            { category: { name: { contains: cat, mode: 'insensitive' } } },
+            { category: { slug: { contains: cat.toLowerCase() } } },
+            { title: { contains: cat, mode: 'insensitive' } },
+            { searchTags: { has: cat.toLowerCase() } },
+          );
+        }
+        andConditions.push({ OR: catOrs });
+      }
     }
 
     if (filter.minRating) {
-      where.avgRating = { gte: filter.minRating };
+      andConditions.push({ avgRating: { gte: filter.minRating } });
     }
 
     if (filter.isFeatured !== undefined) {
-      where.isFeatured = filter.isFeatured;
+      andConditions.push({ isFeatured: filter.isFeatured });
     }
 
     if (filter.search) {
-      where.OR = [
-        { title: { contains: filter.search, mode: 'insensitive' } },
-        { description: { contains: filter.search, mode: 'insensitive' } },
-        { searchTags: { has: filter.search.toLowerCase() } },
-      ];
+      const term = filter.search.trim();
+      andConditions.push({
+        OR: [
+          { title: { contains: term, mode: 'insensitive' } },
+          { description: { contains: term, mode: 'insensitive' } },
+          { searchTags: { has: term.toLowerCase() } },
+          { category: { name: { contains: term, mode: 'insensitive' } } },
+          {
+            professionalProfile: {
+              OR: [
+                { businessName: { contains: term, mode: 'insensitive' } },
+                {
+                  user: {
+                    profile: {
+                      OR: [
+                        { displayName: { contains: term, mode: 'insensitive' } },
+                        { firstName: { contains: term, mode: 'insensitive' } },
+                        { lastName: { contains: term, mode: 'insensitive' } },
+                      ],
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      });
     }
 
     if (filter.minPrice !== undefined || filter.maxPrice !== undefined) {
-      where.packages = {
-        some: {
-          price: {
-            ...(filter.minPrice !== undefined ? { gte: filter.minPrice } : {}),
-            ...(filter.maxPrice !== undefined ? { lte: filter.maxPrice } : {}),
+      andConditions.push({
+        packages: {
+          some: {
+            price: {
+              ...(filter.minPrice !== undefined ? { gte: filter.minPrice } : {}),
+              ...(filter.maxPrice !== undefined ? { lte: filter.maxPrice } : {}),
+            },
           },
         },
-      };
+      });
     }
 
     if (filter.deliveryDays !== undefined) {
-      where.packages = {
-        some: {
-          deliveryDays: { lte: filter.deliveryDays },
+      andConditions.push({
+        packages: {
+          some: {
+            deliveryDays: { lte: filter.deliveryDays },
+          },
         },
-      };
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     const total = await this.prisma.gig.count({ where });
     const page = filter.page ?? 1;
-    const limit = filter.limit ?? 10;
+    const limit = filter.limit ?? 20;
     const totalPages = Math.ceil(total / limit);
 
     const gigs = await this.prisma.gig.findMany({
       where,
       skip: filter.skip,
-      take: filter.take,
+      take: filter.take ?? limit,
       include: {
         packages: {
           orderBy: { price: 'asc' },
@@ -156,7 +276,8 @@ export class GigsService {
         category: true,
         professionalProfile: {
           include: {
-            user: { select: { profile: true } },
+            user: { select: { id: true, email: true, profile: true } },
+            portfolioItems: true,
           },
         },
       },
@@ -180,9 +301,20 @@ export class GigsService {
    * Obtener detalle completo de un Gig por Slug o ID
    */
   async findBySlug(slugOrId: string) {
+    if (!slugOrId || slugOrId === 'undefined' || slugOrId === 'null') {
+      throw new NotFoundException('Gig no encontrado');
+    }
+
+    const trimmed = slugOrId.trim();
+
     const gig = await this.prisma.gig.findFirst({
       where: {
-        OR: [{ slug: slugOrId }, { id: slugOrId }],
+        OR: [
+          { id: trimmed },
+          { slug: trimmed },
+          { slug: trimmed.toLowerCase() },
+          { title: { equals: trimmed, mode: 'insensitive' } },
+        ],
         deletedAt: null,
       },
       include: {
@@ -193,16 +325,23 @@ export class GigsService {
         category: true,
         professionalProfile: {
           include: {
-            user: { select: { profile: true } },
+            user: {
+              select: {
+                id: true,
+                email: true,
+                profile: true,
+              },
+            },
             portfolioItems: true,
+            categories: true,
           },
         },
         reviews: {
-          take: 10,
+          take: 20,
           orderBy: { createdAt: 'desc' },
           include: {
             author: {
-              select: { profile: true },
+              select: { id: true, profile: true },
             },
           },
         },

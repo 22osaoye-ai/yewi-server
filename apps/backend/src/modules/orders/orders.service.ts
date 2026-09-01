@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   EscrowStatus,
@@ -13,6 +14,7 @@ import {
   TransactionType,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { RealtimeService } from '../../common/realtime/realtime.service';
 import {
   CreateGigOrderDto,
   OpenDisputeDto,
@@ -23,7 +25,10 @@ import {
 
 @Injectable()
 export class OrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly realtime?: RealtimeService,
+  ) {}
 
   /**
    * Crear un nuevo pedido a partir de un paquete de Gig (Fiverr Style)
@@ -81,7 +86,7 @@ export class OrdersService {
       !!dto.requirementsAnswers &&
       Object.keys(dto.requirementsAnswers).length > 0;
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const order = await tx.order.create({
         data: {
           orderNumber,
@@ -113,7 +118,7 @@ export class OrdersService {
       });
 
       // Notificar al profesional
-      await tx.notification.create({
+      const notification = await tx.notification.create({
         data: {
           userId: pkg.gig.professionalProfile.userId,
           type: NotificationType.ORDER_CREATED,
@@ -123,8 +128,10 @@ export class OrdersService {
         },
       });
 
-      return order;
+      return { order, notification };
     });
+    this.realtime?.emitNotification(result.notification);
+    return result.order;
   }
 
   /**
@@ -189,7 +196,7 @@ export class OrdersService {
 
     const deliveryNumber = order.deliveries.length + 1;
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const delivery = await tx.orderDelivery.create({
         data: {
           orderId,
@@ -205,7 +212,7 @@ export class OrdersService {
       });
 
       // Notificar al cliente
-      await tx.notification.create({
+      const notification = await tx.notification.create({
         data: {
           userId: order.clientId,
           type: NotificationType.ORDER_DELIVERED,
@@ -215,8 +222,10 @@ export class OrdersService {
         },
       });
 
-      return delivery;
+      return { delivery, notification };
     });
+    this.realtime?.emitNotification(result.notification);
+    return result.delivery;
   }
 
   /**
@@ -244,13 +253,13 @@ export class OrdersService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       await tx.order.update({
         where: { id: orderId },
         data: { status: OrderStatus.REVISION_REQUESTED },
       });
 
-      await tx.notification.create({
+      const notification = await tx.notification.create({
         data: {
           userId: order.professionalProfile.userId,
           type: NotificationType.REVISION_REQUESTED,
@@ -260,8 +269,13 @@ export class OrdersService {
         },
       });
 
-      return { message: 'Solicitud de revisión enviada al profesional' };
+      return {
+        response: { message: 'Solicitud de revisión enviada al profesional' },
+        notification,
+      };
     });
+    this.realtime?.emitNotification(result.notification);
+    return result.response;
   }
 
   /**
@@ -296,7 +310,7 @@ export class OrdersService {
     const proUser = order.professionalProfile.user;
     const earnings = Number(order.proEarnings);
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // 1. Marcar pedido como completado y Escrow liberado
       const updatedOrder = await tx.order.update({
         where: { id: orderId },
@@ -353,7 +367,7 @@ export class OrdersService {
       }
 
       // 6. Notificar al profesional
-      await tx.notification.create({
+      const notification = await tx.notification.create({
         data: {
           userId: proUser.id,
           type: NotificationType.ORDER_COMPLETED,
@@ -363,8 +377,10 @@ export class OrdersService {
         },
       });
 
-      return updatedOrder;
+      return { updatedOrder, notification };
     });
+    this.realtime?.emitNotification(result.notification);
+    return result.updatedOrder;
   }
 
   /**
