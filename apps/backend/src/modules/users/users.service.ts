@@ -114,4 +114,45 @@ export class UsersService {
       data: updateData,
     });
   }
+
+  async deleteAccount(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    const timestamp = Date.now();
+    const anonymizedEmail = `deleted_${userId.slice(0, 8)}_${timestamp}@anonymized.yewi.es`;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.profile.deleteMany({
+        where: { userId },
+      });
+
+      await tx.professionalProfile.deleteMany({
+        where: { userId },
+      });
+
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          email: anonymizedEmail,
+          isActive: false,
+          deletedAt: new Date(),
+          refreshTokenHash: null,
+          emailVerificationToken: null,
+          passwordResetToken: null,
+        },
+      });
+    });
+
+    return {
+      success: true,
+      message: 'Cuenta y datos personales eliminados correctamente.',
+    };
+  }
 }

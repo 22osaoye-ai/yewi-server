@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -133,6 +134,44 @@ export default function LoginScreen() {
     }
   };
 
+  const handlePasskeyLogin = async () => {
+    if (!signIn) return;
+    setIsLoading(true);
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      const signInAny = signIn as any;
+      const res =
+        typeof signInAny.authenticateWithPasskey === 'function'
+          ? await signInAny.authenticateWithPasskey()
+          : typeof signInAny.passkey === 'function'
+          ? await signInAny.passkey()
+          : null;
+
+      if (res?.status === 'complete') {
+        await signIn.finalize({
+          navigate: ({ session }) => {
+            if (session?.currentTask) return;
+            router.replace('/(tabs)');
+          },
+        });
+      }
+    } catch (err: any) {
+      if (
+        err?.message?.includes('User cancelled') ||
+        err?.name === 'NotAllowedError' ||
+        err?.message?.includes('cancel')
+      ) {
+        return;
+      }
+      showAlert(
+        'Acceso biométrico (Passkey)',
+        'No se encontró ninguna Passkey en este dispositivo para tu cuenta. Inicia sesión con Google o correo primero y podrás registrar tu Passkey.'
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.background }}
@@ -192,17 +231,50 @@ export default function LoginScreen() {
                 variant="stacked"
               />
 
-              {/* Use Email Instead Link */}
+              {/* Passkey / Biometrics Button */}
               <ThemedTouchable
-                onPress={() => setUseEmailForm(true)}
-                haptic="selection"
-                style={{ paddingVertical: 12, alignItems: 'center' }}
+                onPress={handlePasskeyLogin}
+                haptic="medium"
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                  backgroundColor: isDark ? '#1C1C1F' : '#F4F4F5',
+                  borderWidth: 1,
+                  borderColor: isDark ? '#2E2E33' : '#E4E4E7',
+                  borderRadius: 14,
+                  paddingVertical: 14,
+                  marginTop: 10,
+                }}
               >
+                <Ionicons
+                  name={Platform.OS === 'ios' ? 'scan-outline' : 'finger-print-outline'}
+                  size={20}
+                  color={colors.primary}
+                />
                 <Text
                   style={{
                     fontSize: 14.5,
                     fontFamily: 'Satoshi-Bold',
                     color: colors.textPrimary,
+                  }}
+                >
+                  Acceder con Passkey / Huella o Face ID
+                </Text>
+              </ThemedTouchable>
+
+              {/* Use Email Instead Link */}
+              <ThemedTouchable
+                onPress={() => setUseEmailForm(true)}
+                haptic="selection"
+                style={{ paddingVertical: 14, alignItems: 'center' }}
+              >
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontFamily: 'Satoshi-Bold',
+                    color: colors.textSecondary,
                     textDecorationLine: 'underline',
                   }}
                 >

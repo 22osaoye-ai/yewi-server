@@ -1,4 +1,5 @@
 import { ClerkProvider, useAuth } from '@clerk/expo';
+import { passkeys } from '@clerk/expo/passkeys';
 import * as SecureStore from 'expo-secure-store';
 import "./global.css";
 
@@ -210,7 +211,11 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+      <ClerkProvider
+        publishableKey={publishableKey}
+        tokenCache={tokenCache}
+        __experimental_passkeys={passkeys}
+      >
         <ClerkAuthSync />
         <RootNavigation isFontsReady={isFontsReady} />
       </ClerkProvider>

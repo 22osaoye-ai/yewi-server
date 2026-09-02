@@ -9,10 +9,23 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "es.yewi.app",
+      "buildNumber": "1",
+      "associatedDomains": [
+        "applinks:clerk.yewi.com",
+        "webcredentials:clerk.yewi.com"
+      ],
+      "infoPlist": {
+        "NSCameraUsageDescription": "Yewi necesita acceso a la cámara para capturar fotos de averías, trabajos realizados y comprobantes de proyectos.",
+        "NSPhotoLibraryUsageDescription": "Yewi necesita acceso a tu galería de fotos para adjuntar imágenes a solicitudes, proyectos y perfiles.",
+        "NSLocationWhenInUseUsageDescription": "Yewi utiliza tu ubicación para encontrar y mostrarte profesionales y solicitudes cercanas en España.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Yewi utiliza tu ubicación para ofrecerte servicios en tu zona geográfica."
+      }
     },
     "android": {
       "package": "com.yewi.app",
+      "versionCode": 1,
       "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
@@ -21,6 +34,25 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_MEDIA_IMAGES"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "clerk.yewi.com"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ],
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
@@ -31,6 +63,14 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ],
       [
         "expo-splash-screen",
         {

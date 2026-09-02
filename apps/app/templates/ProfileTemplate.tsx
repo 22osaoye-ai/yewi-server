@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import * as Haptics from 'expo-haptics';
+import { useAuth as useClerkAuth } from '@clerk/expo';
 import { ThemedTouchable } from '@/components/ui/ThemedTouchable';
 import { CustomAlert } from '@/components/ui/CustomAlert';
 import { UserAvatar } from '@/components/ui/UserAvatar';
@@ -135,16 +136,35 @@ export function ProfileTemplate() {
     refreshProStatus();
   }, [refreshProStatus]);
 
+  const { signOut } = useClerkAuth();
+
   // Modal & Status States
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [showPhotoModal, setShowPhotoModal] = useState<boolean>(false);
   const [showSellerModal, setShowSellerModal] = useState<boolean>(false);
   const [showCountryModal, setShowCountryModal] = useState<boolean>(false);
+  const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState<boolean>(false);
   const [selectedCountry, setSelectedCountry] = useState<CountryPrefix>(COUNTRY_PREFIXES[0]);
 
   const [sellerStep, setSellerStep] = useState<number>(1);
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
+
+  const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true);
+    try {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      await authService.deleteAccount();
+      await signOut?.().catch(() => {});
+      setShowDeleteModal(false);
+      router.replace('/auth/login');
+    } catch (e: any) {
+      showAlert('Error', e.message || 'No se pudo eliminar la cuenta en este momento.');
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
 
   // Projects State
   const [showMyProjectsModal, setShowMyProjectsModal] = useState<boolean>(false);
@@ -847,6 +867,8 @@ export function ProfileTemplate() {
               justifyContent: 'space-between',
               paddingVertical: 16,
               paddingHorizontal: 18,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.borderSubtle,
             }}
           >
             <View className="flex-row items-center flex-1">
@@ -863,6 +885,34 @@ export function ProfileTemplate() {
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+          </ThemedTouchable>
+
+          {/* Item 3: Eliminar Cuenta (Apple & Google Store Mandatory) */}
+          <ThemedTouchable
+            onPress={() => setShowDeleteModal(true)}
+            haptic="selection"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingVertical: 16,
+              paddingHorizontal: 18,
+            }}
+          >
+            <View className="flex-row items-center flex-1">
+              <Ionicons name="trash-outline" size={21} color="#EF4444" />
+              <Text
+                style={{
+                  fontSize: 15.5,
+                  fontFamily: 'Satoshi-Bold',
+                  color: '#EF4444',
+                  marginLeft: 14,
+                }}
+              >
+                Eliminar mi cuenta
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#EF444480" />
           </ThemedTouchable>
         </View>
 
@@ -1645,6 +1695,120 @@ export function ProfileTemplate() {
           setShowPublishProjectModal(false);
         }}
       />
+
+      {/* Delete Account Confirmation Modal (Apple & Google Compliance) */}
+      <Modal
+        visible={showDeleteModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowDeleteModal(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(0,0,0,0.7)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingHorizontal: 24,
+          }}
+        >
+          <View
+            style={{
+              width: '100%',
+              maxWidth: 380,
+              backgroundColor: colors.surface,
+              borderRadius: 24,
+              padding: 24,
+              borderWidth: 1,
+              borderColor: colors.border,
+              alignItems: 'center',
+            }}
+          >
+            <View
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                backgroundColor: '#EF444420',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 16,
+              }}
+            >
+              <Ionicons name="warning-outline" size={28} color="#EF4444" />
+            </View>
+
+            <Text
+              style={{
+                fontSize: 19,
+                fontFamily: 'Satoshi-Black',
+                color: colors.textPrimary,
+                marginBottom: 10,
+                textAlign: 'center',
+              }}
+            >
+              ¿Eliminar tu cuenta?
+            </Text>
+
+            <Text
+              style={{
+                fontSize: 13.5,
+                fontFamily: 'Satoshi-Regular',
+                color: colors.textSecondary,
+                textAlign: 'center',
+                lineHeight: 20,
+                marginBottom: 24,
+              }}
+            >
+              Esta acción es <Text style={{ fontFamily: 'Satoshi-Bold', color: '#EF4444' }}>irreversible</Text>. Se eliminarán de forma permanente tu perfil, datos personales, solicitudes y accesos de acuerdo con el RGPD y las normativas de Apple y Google.
+            </Text>
+
+            <View style={{ width: '100%', gap: 10 }}>
+              <ThemedTouchable
+                onPress={handleDeleteAccount}
+                haptic="heavy"
+                disabled={isDeletingAccount}
+                style={{
+                  width: '100%',
+                  paddingVertical: 14,
+                  borderRadius: 14,
+                  backgroundColor: '#EF4444',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {isDeletingAccount ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={{ fontSize: 14.5, fontFamily: 'Satoshi-Bold', color: '#FFFFFF' }}>
+                    Sí, eliminar mi cuenta definitivamente
+                  </Text>
+                )}
+              </ThemedTouchable>
+
+              <ThemedTouchable
+                onPress={() => setShowDeleteModal(false)}
+                haptic="light"
+                disabled={isDeletingAccount}
+                style={{
+                  width: '100%',
+                  paddingVertical: 13,
+                  borderRadius: 14,
+                  backgroundColor: colors.surfaceAlt,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                <Text style={{ fontSize: 14.5, fontFamily: 'Satoshi-Medium', color: colors.textPrimary }}>
+                  Cancelar y conservar mi cuenta
+                </Text>
+              </ThemedTouchable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <CustomAlert
         visible={alertConfig.visible}

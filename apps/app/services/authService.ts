@@ -79,6 +79,16 @@ export class AuthService {
     await authApi.logout();
     await clearTokens();
   }
+
+  // 7. Eliminar cuenta y datos personales (cumplimiento Apple & Google Play)
+  async deleteAccount(): Promise<void> {
+    try {
+      await authApi.deleteAccount();
+    } catch (e) {
+      console.warn('Error deleting account from API:', e);
+    }
+    await useAuthStore.getState().logout();
+  }
 }
 
 export const authService = new AuthService();

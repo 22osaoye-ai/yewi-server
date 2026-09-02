@@ -228,4 +228,11 @@ export const authApi = {
       body: JSON.stringify(data),
     });
   },
+
+  // 10. Eliminar cuenta y datos personales (cumplimiento Apple & Google Play)
+  async deleteAccount(): Promise<void> {
+    await apiRequest('/users/me', {
+      method: 'DELETE',
+    });
+  },
 };
