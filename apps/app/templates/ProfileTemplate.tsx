@@ -26,6 +26,7 @@ import { ProjectCard } from '@/components/ui/ProjectCard';
 import { PublishProjectModal } from '@/components/ui/PublishProjectModal';
 
 import { paymentsApi } from '@/services/paymentsApi';
+import { SkeletonBanner } from '@/components/ui/Skeleton';
 
 function isValidTaxId(id: string): boolean {
   if (!id) return false;
@@ -108,20 +109,27 @@ export function ProfileTemplate() {
   const favoritesCount = useFavoritesStore((state) => state.favorites.length);
   const { user, isAuthenticated, updateUser } = useAuthStore();
   const unreadCount = useRealtimeStore((state) => state.unreadCount);
-  const [isPro, setIsPro] = useState(false);
+  const cachedIsPro = user?.isPro || useRealtimeStore((state) => state.subscription?.isPro);
+  const [isPro, setIsPro] = useState<boolean>(cachedIsPro ?? false);
+  const [isCheckingPro, setIsCheckingPro] = useState<boolean>(cachedIsPro === undefined);
 
   const refreshProStatus = useCallback(async () => {
     if (!isAuthenticated) {
       setIsPro(false);
+      setIsCheckingPro(false);
       return;
     }
     try {
       const status = await paymentsApi.getSubscriptionStatus();
-      setIsPro(status.isPro === true);
+      const nextPro = status.isPro === true;
+      setIsPro(nextPro);
+      updateUser({ isPro: nextPro });
     } catch {
-      setIsPro(false);
+      setIsPro(cachedIsPro ?? false);
+    } finally {
+      setIsCheckingPro(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, cachedIsPro, updateUser]);
 
   useEffect(() => {
     refreshProStatus();
@@ -574,21 +582,25 @@ export function ProfileTemplate() {
       >
         {/* YEWI PRO SUBSCRIPTION HERO TICKET BANNER */}
         <View style={{ marginBottom: 24 }}>
-          <HomePromoBanner
-            ad={{
-              id: 'yewi-pro-profile',
-              variant: isPro ? 'pro' : 'seller',
-              badge: isPro ? 'SUSCRIPCIÓN ACTIVA' : 'PLAN PROFESIONAL',
-              title: isPro ? 'Yewi Pro Activo' : 'Yewi Pro (9,99 €/mes)',
-              description: isPro
-                ? 'Disfrutas de prioridad en solicitudes, contacto directo y cobertura en toda España.'
-                : 'Multiplica tus clientes: recibe solicitudes primero y accede a contacto directo sin límites.',
-              ctaText: isPro ? 'Gestionar Plan' : 'Ver ventajas',
-              discountBadge: isPro ? 'PRO' : 'SELLER',
-            }}
-            onPress={() => router.push('/subscription')}
-            onCtaPress={() => router.push('/subscription')}
-          />
+          {isCheckingPro ? (
+            <SkeletonBanner height={135} borderRadius={20} />
+          ) : (
+            <HomePromoBanner
+              ad={{
+                id: 'yewi-pro-profile',
+                variant: isPro ? 'pro' : 'seller',
+                badge: isPro ? 'SUSCRIPCIÓN ACTIVA' : 'PLAN PROFESIONAL',
+                title: isPro ? 'Yewi Pro Activo' : 'Yewi Pro (9,99 €/mes)',
+                description: isPro
+                  ? 'Disfrutas de prioridad en solicitudes, contacto directo y cobertura en toda España.'
+                  : 'Multiplica tus clientes: recibe solicitudes primero y accede a contacto directo sin límites.',
+                ctaText: isPro ? 'Gestionar Plan' : 'Ver ventajas',
+                discountBadge: isPro ? 'PRO' : 'SELLER',
+              }}
+              onPress={() => router.push('/subscription')}
+              onCtaPress={() => router.push('/subscription')}
+            />
+          )}
         </View>
 
 

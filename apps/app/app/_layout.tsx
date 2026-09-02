@@ -20,6 +20,7 @@ import { notificationService } from '@/services/notificationService';
 import { ToastContainer } from '@/components/ui/ToastContainer';
 
 WebBrowser.maybeCompleteAuthSession();
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const publishableKey =
   process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ||
@@ -48,7 +49,7 @@ const tokenCache = {
 
 
 
-function RootNavigation() {
+function RootNavigation({ isFontsReady }: { isFontsReady: boolean }) {
   const router = useRouter();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
@@ -56,9 +57,7 @@ function RootNavigation() {
   const { isAuthenticated, isLoading, hasSeenOnboarding, needsProfileCompletion } = useAuthStore();
 
   const isNavigationReady = Boolean(navigationState?.key);
-  const isAppReady = !isLoading && isNavigationReady;
-
-
+  const isAppReady = !isLoading && isNavigationReady && isFontsReady;
 
   useEffect(() => {
     notificationService.init().catch(() => {});
@@ -143,7 +142,7 @@ function RootNavigation() {
           flex: 1,
           justifyContent: 'center',
           alignItems: 'center',
-          backgroundColor: colorScheme === 'dark' ? '#09090B' : '#F8F8FA',
+          backgroundColor: colorScheme === 'dark' ? '#09090B' : '#09090B',
         }}
       >
         <ActivityIndicator size="large" color="#C87D20" />
@@ -186,18 +185,34 @@ export default function RootLayout() {
     'Satoshi-Black': require('../assets/fonts/Satoshi-Black.ttf'),
   });
 
+  const isFontsReady = Boolean(loaded || error);
+
   useEffect(() => {
-    if ((loaded || error) && !isLoading) {
+    if (isFontsReady && !isLoading) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [loaded, error, isLoading]);
+  }, [isFontsReady, isLoading]);
 
+  if (!isFontsReady || isLoading) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#09090B',
+        }}
+      >
+        <ActivityIndicator size="large" color="#C87D20" />
+      </View>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
         <ClerkAuthSync />
-        <RootNavigation />
+        <RootNavigation isFontsReady={isFontsReady} />
       </ClerkProvider>
     </GestureHandlerRootView>
   );

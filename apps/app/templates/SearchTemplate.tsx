@@ -21,6 +21,7 @@ import {
 import { gigsApi, GigDetail } from '@/services/gigsApi';
 import { ProjectCard } from '@/components/ui/ProjectCard';
 import { PublishProjectModal } from '@/components/ui/PublishProjectModal';
+import { SkeletonCard } from '@/components/ui/Skeleton';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useInterestsStore } from '@/store/useInterestsStore';
@@ -609,18 +610,10 @@ export function SearchTemplate() {
           </View>
 
           {loading ? (
-            <View className="flex-1 items-center justify-center py-20">
-              <ActivityIndicator color={colors.primary} size="large" />
-              <Text
-                style={{
-                  fontSize: 13.5,
-                  fontFamily: 'Satoshi-Medium',
-                  color: colors.textSecondary,
-                  marginTop: 12,
-                }}
-              >
-                Buscando servicios y profesionales...
-              </Text>
+            <View style={{ paddingHorizontal: 18, paddingTop: 12, gap: 12 }}>
+              <SkeletonCard height={110} />
+              <SkeletonCard height={110} />
+              <SkeletonCard height={110} />
             </View>
           ) : professionals.length > 0 || searchProjects.length > 0 ? (
             <ScrollView

@@ -33,6 +33,7 @@ import { HomePromoBanner } from '@/components/ui/HomePromoBanner';
 import { useRealtimeStore } from '@/store/useRealtimeStore';
 import { SwipeableRow } from '@/components/ui/SwipeableRow';
 import { toast } from '@/store/useToastStore';
+import { SkeletonCard } from '@/components/ui/Skeleton';
 
 
 const STORAGE_MY_REQUESTS = '@yewi_cached_my_requests';
@@ -560,12 +561,19 @@ export function RequestsTemplate() {
 
       {/* Main Content List */}
       {isLoading ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ marginTop: 12, fontFamily: 'Satoshi-Medium', color: colors.textSecondary, fontSize: 14 }}>
-            Cargando...
-          </Text>
-        </View>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{
+            paddingHorizontal: 18,
+            paddingTop: 16,
+            gap: 12,
+          }}
+        >
+          <SkeletonCard height={120} />
+          <SkeletonCard height={120} />
+          <SkeletonCard height={120} />
+          <SkeletonCard height={120} />
+        </ScrollView>
       ) : (
         <FlatList
           data={listData}
