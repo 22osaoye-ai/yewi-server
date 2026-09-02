@@ -1,6 +1,10 @@
 import { defineConfig } from 'prisma/config';
 
-process.loadEnvFile?.();
+try {
+  process.loadEnvFile?.();
+} catch {
+  // Ignored in environments where environment variables are injected via platform environment
+}
 
 export default defineConfig({
   schema: 'prisma/schema.prisma',
@@ -8,3 +12,4 @@ export default defineConfig({
     url: process.env.DATABASE_URL,
   },
 });
+

@@ -2,7 +2,11 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
-process.loadEnvFile?.();
+try {
+  process.loadEnvFile?.();
+} catch {
+  // Ignored in environments where environment variables are injected directly
+}
 
 const connectionString = process.env.DATABASE_URL;
 const pool = new Pool({ connectionString });
