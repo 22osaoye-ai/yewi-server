@@ -7,12 +7,17 @@ export function ClerkAuthSync() {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const { user } = useUser();
   const wasSignedInWithClerk = useRef(false);
+  const isSyncing = useRef(false);
+  const lastSyncedId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isLoaded) return;
 
     if (isSignedIn && user) {
+      if (isSyncing.current || lastSyncedId.current === user.id) return;
+      isSyncing.current = true;
       wasSignedInWithClerk.current = true;
+
       (async () => {
         try {
           const email = user.primaryEmailAddress?.emailAddress || `${user.id}@clerk.user`;
@@ -58,23 +63,23 @@ export function ClerkAuthSync() {
             };
           }
 
-          const hasPhone = Boolean(
-            backendUser.phoneNumber && !backendUser.phoneNumber.includes('@')
-          );
-
           await useAuthStore.getState().setAuth(
             backendUser,
             accessToken,
             refreshToken
           );
           useAuthStore.getState().setNeedsProfileCompletion(false);
+          lastSyncedId.current = user.id;
         } catch (e) {
           console.error('[ClerkAuthSync] Error crítico al sincronizar sesión:', e);
           useAuthStore.setState({ isLoading: false });
+        } finally {
+          isSyncing.current = false;
         }
       })();
     } else if (!isSignedIn && wasSignedInWithClerk.current) {
       wasSignedInWithClerk.current = false;
+      lastSyncedId.current = null;
       if (useAuthStore.getState().isAuthenticated) {
         useAuthStore.getState().logout();
       }

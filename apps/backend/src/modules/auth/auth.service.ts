@@ -285,11 +285,13 @@ export class AuthService {
       throw new BadRequestException('Se requiere un correo de Google válido');
     }
 
-    const normalizedEmail = email.toLowerCase();
+    const normalizedEmail = email.toLowerCase().trim();
 
     // 1. Buscar usuario existente
-    let user = await this.prisma.user.findUnique({
-      where: { email: normalizedEmail },
+    let user = await this.prisma.user.findFirst({
+      where: {
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
       include: {
         profile: true,
         professionalProfile: true,
@@ -297,7 +299,7 @@ export class AuthService {
       },
     });
 
-    // 2. Si no existe, crear en PostgreSQL
+    // 2. Si no existe, crear en PostgreSQL con manejo seguro de concurrencia
     if (!user) {
       const names = (name || 'Usuario Google').trim().split(' ');
       const firstName = names[0] || 'Usuario';
@@ -307,52 +309,72 @@ export class AuthService {
         `google_${Date.now()}_${Math.random()}`,
       );
 
-      const created = await this.prisma.$transaction(async (tx) => {
-        const newUser = await tx.user.create({
-          data: {
-            email: normalizedEmail,
-            passwordHash: randomPassword,
-            roles: [UserRole.CLIENT],
-            isEmailVerified: true,
+      try {
+        const created = await this.prisma.$transaction(async (tx) => {
+          const newUser = await tx.user.create({
+            data: {
+              email: normalizedEmail,
+              passwordHash: randomPassword,
+              roles: [UserRole.CLIENT],
+              isEmailVerified: true,
+            },
+          });
+
+          await tx.profile.create({
+            data: {
+              userId: newUser.id,
+              firstName,
+              lastName,
+              displayName: `${firstName} ${lastName}`.trim(),
+              avatarUrl: avatarUrl ?? null,
+              country: 'España',
+              city: null,
+              postalCode: null,
+              address: null,
+            },
+          });
+
+          await tx.wallet.create({
+            data: {
+              userId: newUser.id,
+              creditBalance: 0,
+              fiatAvailableBalance: 0,
+              fiatPendingBalance: 0,
+            },
+          });
+
+          return newUser;
+        });
+
+        user = await this.prisma.user.findUnique({
+          where: { id: created.id },
+          include: {
+            profile: true,
+            professionalProfile: true,
+            wallet: true,
+          },
+        });
+      } catch (createError) {
+        // Si ocurrió colisión por concurrencia o constraint único, recuperar el usuario existente
+        user = await this.prisma.user.findFirst({
+          where: {
+            email: { equals: normalizedEmail, mode: 'insensitive' },
+          },
+          include: {
+            profile: true,
+            professionalProfile: true,
+            wallet: true,
           },
         });
 
-        await tx.profile.create({
-          data: {
-            userId: newUser.id,
-            firstName,
-            lastName,
-            displayName: `${firstName} ${lastName}`.trim(),
-            avatarUrl: avatarUrl ?? null,
-            country: 'España',
-            city: null,
-            postalCode: null,
-            address: null,
-          },
-        });
+        if (!user) {
+          throw createError;
+        }
+      }
+    }
 
-        await tx.wallet.create({
-          data: {
-            userId: newUser.id,
-            creditBalance: 0,
-            fiatAvailableBalance: 0,
-            fiatPendingBalance: 0,
-          },
-        });
-
-        return newUser;
-      });
-
-      user = await this.prisma.user.findUnique({
-        where: { id: created.id },
-        include: {
-          profile: true,
-          professionalProfile: true,
-          wallet: true,
-        },
-      });
-    } else {
-      // Si el usuario ya existe, actualizar su avatarUrl y displayName si Google nos entrega nuevos datos
+    if (user) {
+      // Actualizar avatarUrl y displayName si nos entregan nuevos datos
       const hasNewAvatar = avatarUrl && user.profile && user.profile.avatarUrl !== avatarUrl;
       const hasMissingDisplayName = name && user.profile && !user.profile.displayName;
 
