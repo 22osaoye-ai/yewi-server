@@ -140,14 +140,19 @@ async function bootstrap() {
   });
 
   await app.listen(port, '0.0.0.0');
+  const appUrl =
+    process.env.RENDER_EXTERNAL_URL ||
+    process.env.PUBLIC_APP_URL ||
+    `http://localhost:${port}`;
+
   logger.log(
     `================================================================`,
   );
   logger.log(
-    `🚀 Servidor Yewi iniciado exitosamente en: http://localhost:${port}/${apiPrefix}`,
+    `🚀 Servidor Yewi iniciado exitosamente en: ${appUrl}/${apiPrefix}`,
   );
   logger.log(
-    `📚 Documentación Swagger interactiva: http://localhost:${port}/api/docs`,
+    `📚 Documentación Swagger interactiva: ${appUrl}/api/docs`,
   );
   logger.log(
     `================================================================`,

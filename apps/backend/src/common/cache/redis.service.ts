@@ -15,23 +15,43 @@ export class RedisCacheService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly configService: ConfigService) {}
 
   onModuleInit() {
+    const redisUrl = this.configService.get<string>('redis.url') || process.env.REDIS_URL;
     const host = this.configService.get<string>('redis.host') ?? 'localhost';
     const port = this.configService.get<number>('redis.port') ?? 6379;
     const password = this.configService.get<string>('redis.password');
 
-    this.client = new Redis({
-      host,
-      port,
-      password: password || undefined,
-      retryStrategy: (times) => {
-        const delay = Math.min(times * 100, 3000);
-        return delay;
-      },
-      maxRetriesPerRequest: 3,
-    });
+    const retryStrategy = (times: number) => {
+      if (times > 5) {
+        // Detener intentos continuos si Redis no está aprovisionado
+        return null;
+      }
+      return Math.min(times * 200, 2000);
+    };
+
+    if (redisUrl && redisUrl.trim() !== '') {
+      this.client = new Redis(redisUrl, {
+        retryStrategy,
+        maxRetriesPerRequest: 3,
+        enableOfflineQueue: false,
+      });
+      this.logger.log(`Iniciando conexión a Redis mediante REDIS_URL`);
+    } else {
+      this.client = new Redis({
+        host,
+        port,
+        password: password || undefined,
+        retryStrategy,
+        maxRetriesPerRequest: 3,
+        enableOfflineQueue: false,
+      });
+    }
 
     this.client.on('connect', () => {
-      this.logger.log(`Conexión establecida con Redis en ${host}:${port}`);
+      this.logger.log(
+        redisUrl
+          ? 'Conexión establecida con éxito a Redis remoto'
+          : `Conexión establecida con Redis en ${host}:${port}`,
+      );
     });
 
     this.client.on('error', (err) => {
