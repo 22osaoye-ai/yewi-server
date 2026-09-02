@@ -9,6 +9,7 @@
     "dev:app:web": "pnpm --filter app web",
     "dev:app:tunnel": "pnpm --filter app start --tunnel -c",
     "dev:app:clear": "pnpm --filter app start -c",
+    "build": "pnpm --filter backend build",
     "build:backend": "pnpm --filter backend build",
     "test:backend": "pnpm --filter backend test",
     "test:e2e": "pnpm --filter backend test:e2e",
