@@ -85,7 +85,6 @@ export function ProductCard({ product, onPress }: ProductCardProps) {
                 paddingHorizontal: 8,
                 paddingVertical: 3.5,
                 borderRadius: 999,
-                backdropFilter: 'blur(4px)',
               }}
             >
               <Ionicons name="location" size={11} color="#FBBF24" style={{ marginRight: 3 }} />
