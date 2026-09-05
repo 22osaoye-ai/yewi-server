@@ -1,7 +1,17 @@
 import { ClerkProvider, useAuth } from '@clerk/expo';
-import { passkeys } from '@clerk/expo/passkeys';
+import { requireOptionalNativeModule } from 'expo';
 import * as SecureStore from 'expo-secure-store';
 import "./global.css";
+
+// Safely load Clerk passkeys if native module is present in the current runtime
+let passkeys: any = undefined;
+if (requireOptionalNativeModule('ClerkExpoPasskeys')) {
+  try {
+    passkeys = require('@clerk/expo/passkeys').passkeys;
+  } catch {
+    passkeys = undefined;
+  }
+}
 
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -214,7 +224,7 @@ export default function RootLayout() {
       <ClerkProvider
         publishableKey={publishableKey}
         tokenCache={tokenCache}
-        __experimental_passkeys={passkeys}
+        {...(passkeys ? { __experimental_passkeys: passkeys } : {})}
       >
         <ClerkAuthSync />
         <RootNavigation isFontsReady={isFontsReady} />
