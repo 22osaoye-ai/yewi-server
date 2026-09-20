@@ -68,7 +68,16 @@ export class ProfessionalsService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
-    if (!user.professionalProfile && dto.bio === undefined) {
+    const bioText =
+      dto.bio !== undefined
+        ? dto.bio.trim()
+        : dto.businessName
+          ? `Servicios profesionales de ${dto.businessName.trim()}`
+          : (user as any).fullName
+            ? `Servicios profesionales de ${(user as any).fullName.trim()}`
+            : undefined;
+
+    if (!user.professionalProfile && !bioText) {
       throw new BadRequestException(
         'El campo bio es obligatorio al crear un perfil profesional',
       );
@@ -110,7 +119,7 @@ export class ProfessionalsService {
           businessName: dto.businessName,
         }),
         ...(dto.taxId !== undefined && { taxId: dto.taxId }),
-        bio: dto.bio!,
+        bio: bioText || 'Servicios profesionales',
         ...(dto.hourlyRate !== undefined && { hourlyRate: dto.hourlyRate }),
         ...(dto.serviceRadiusKm !== undefined && {
           serviceRadiusKm: dto.serviceRadiusKm,
@@ -133,7 +142,7 @@ export class ProfessionalsService {
           businessName: dto.businessName,
         }),
         ...(dto.taxId !== undefined && { taxId: dto.taxId }),
-        ...(dto.bio !== undefined && { bio: dto.bio }),
+        ...(dto.bio !== undefined && { bio: dto.bio.trim() }),
         ...(dto.hourlyRate !== undefined && { hourlyRate: dto.hourlyRate }),
         ...(dto.serviceRadiusKm !== undefined && {
           serviceRadiusKm: dto.serviceRadiusKm,

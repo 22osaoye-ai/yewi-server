@@ -7,6 +7,7 @@ import {
   ConfirmCreditPaymentDto,
   CreateCreditPaymentIntentDto,
   CreditPack,
+  DepositFiatDto,
   RequestPayoutDto,
 } from './dto/buy-credits.dto';
 
@@ -276,4 +277,43 @@ export class WalletService {
       };
     });
   }
+
+  /**
+   * Recargar saldo disponible fiat en la billetera
+   */
+  async depositFiat(userId: string, dto: DepositFiatDto) {
+    const wallet = await this.getMyWallet(userId);
+    const depositAmount = Number(dto.amount);
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.wallet.update({
+        where: { id: wallet.id },
+        data: {
+          fiatAvailableBalance: { increment: depositAmount },
+        },
+      });
+
+      const txRecord = await tx.ledgerTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: TransactionType.ORDER_PAYMENT,
+          amount: depositAmount,
+          currency: 'EUR',
+          status: TransactionStatus.COMPLETED,
+          metadata: {
+            action: 'FIAT_DEPOSIT',
+            description: `Recarga de saldo disponible de ${depositAmount.toFixed(2)} €`,
+          },
+        },
+      });
+
+      return {
+        success: true,
+        message: `Se han añadido ${depositAmount.toFixed(2)} € a tu saldo disponible`,
+        transactionId: txRecord.id,
+        newAvailableBalance: updated.fiatAvailableBalance,
+      };
+    });
+  }
 }
+

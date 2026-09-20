@@ -12,6 +12,7 @@ import {
   BuyCreditsDto,
   ConfirmCreditPaymentDto,
   CreateCreditPaymentIntentDto,
+  DepositFiatDto,
   RequestPayoutDto,
 } from './dto/buy-credits.dto';
 import { WalletService } from './wallet.service';
@@ -113,4 +114,19 @@ export class WalletController {
   ) {
     return this.walletService.requestPayout(userId, dto);
   }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Post('deposit')
+  @ApiOperation({
+    summary: 'Recargar saldo fiat disponible en la billetera para depósitos y órdenes en Escrow',
+  })
+  @ApiResponse({ status: 200, description: 'Saldo recargado exitosamente' })
+  async depositFiat(
+    @CurrentUser('id') userId: string,
+    @Body() dto: DepositFiatDto,
+  ) {
+    return this.walletService.depositFiat(userId, dto);
+  }
 }
+

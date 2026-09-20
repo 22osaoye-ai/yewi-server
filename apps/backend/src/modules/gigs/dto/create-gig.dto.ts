@@ -48,16 +48,13 @@ export class CreatePackageDto {
   revisions: number = 1;
 
   @ApiPropertyOptional({
-    example: {
-      sourceFiles: true,
-      highResolution: true,
-      commercialUse: true,
-      conceptsCount: 2,
-    },
+    example: [
+      'Todo lo incluido en el plan Completo',
+      'Prioridad absoluta en agenda inmediata',
+    ],
   })
   @IsOptional()
-  @IsObject()
-  features?: Record<string, any>;
+  features?: any;
 
   @ApiPropertyOptional({ default: false })
   @IsOptional()

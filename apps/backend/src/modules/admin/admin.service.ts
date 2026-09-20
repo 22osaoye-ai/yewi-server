@@ -216,12 +216,14 @@ export class AdminService {
       });
 
       // 2. Actualizar estado del pedido y escrow
+      const isFullRefund = dto.refundAmountClient >= totalOrderAmount;
       await tx.order.update({
         where: { id: order.id },
         data: {
-          status: OrderStatus.COMPLETED,
-          escrowStatus:
-            dto.refundAmountClient > 0
+          status: isFullRefund ? OrderStatus.CANCELLED : OrderStatus.COMPLETED,
+          escrowStatus: isFullRefund
+            ? EscrowStatus.REFUNDED_TO_CLIENT
+            : dto.refundAmountClient > 0
               ? EscrowStatus.PARTIALLY_REFUNDED
               : EscrowStatus.RELEASED_TO_PRO,
         },
@@ -297,5 +299,174 @@ export class AdminService {
       this.realtime?.emitNotification(notification),
     );
     return result.resolvedDispute;
+  }
+
+  /**
+   * Listar solicitudes de retiro de ganancias fiat pendientes de aprobación
+   */
+  async getPendingPayouts() {
+    return this.prisma.ledgerTransaction.findMany({
+      where: {
+        type: TransactionType.PAYOUT_WITHDRAWAL,
+        status: TransactionStatus.PENDING,
+      },
+      include: {
+        wallet: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                profile: {
+                  select: {
+                    displayName: true,
+                    firstName: true,
+                    lastName: true,
+                  },
+                },
+                professionalProfile: {
+                  select: {
+                    businessName: true,
+                    taxId: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /**
+   * Procesar solicitud de retiro (Aprobar o Rechazar con devolución de saldo)
+   */
+  async processPayout(
+    transactionId: string,
+    action: 'APPROVE' | 'REJECT',
+    notes?: string,
+  ) {
+    const txRecord = await this.prisma.ledgerTransaction.findUnique({
+      where: { id: transactionId },
+      include: {
+        wallet: {
+          include: { user: true },
+        },
+      },
+    });
+
+    if (!txRecord) {
+      throw new NotFoundException('Transacción de retiro no encontrada');
+    }
+
+    if (txRecord.type !== TransactionType.PAYOUT_WITHDRAWAL) {
+      throw new BadRequestException(
+        'La transacción no es una solicitud de retiro',
+      );
+    }
+
+    if (txRecord.status !== TransactionStatus.PENDING) {
+      throw new BadRequestException(
+        `La solicitud ya ha sido procesada previamente (${txRecord.status})`,
+      );
+    }
+
+    const withdrawAmount = Math.abs(Number(txRecord.amount));
+
+    return this.prisma.$transaction(async (tx) => {
+      if (action === 'APPROVE') {
+        const updated = await tx.ledgerTransaction.update({
+          where: { id: transactionId },
+          data: {
+            status: TransactionStatus.COMPLETED,
+            metadata: {
+              ...(typeof txRecord.metadata === 'object' &&
+              txRecord.metadata !== null
+                ? (txRecord.metadata as Record<string, any>)
+                : {}),
+              processedAt: new Date().toISOString(),
+              adminNotes: notes || 'Retiro aprobado y transferido',
+            },
+          },
+        });
+
+        // Notificar al profesional
+        const notif = await tx.notification.create({
+          data: {
+            userId: txRecord.wallet.userId,
+            type: NotificationType.SYSTEM_ALERT,
+            title: 'Retiro de fondos aprobado',
+            message: `Tu retiro de ${withdrawAmount.toFixed(2)} € ha sido procesado exitosamente hacia tu cuenta.`,
+            link: '/profile',
+          },
+        });
+        this.realtime?.emitNotification(notif);
+
+        return {
+          success: true,
+          message: 'Retiro aprobado con éxito',
+          transaction: updated,
+        };
+      } else {
+        // RECHAZO: Devolver saldo íntegro a fiatAvailableBalance del usuario
+        await tx.wallet.update({
+          where: { id: txRecord.walletId },
+          data: {
+            fiatAvailableBalance: { increment: withdrawAmount },
+          },
+        });
+
+        const updated = await tx.ledgerTransaction.update({
+          where: { id: transactionId },
+          data: {
+            status: TransactionStatus.FAILED,
+            metadata: {
+              ...(typeof txRecord.metadata === 'object' &&
+              txRecord.metadata !== null
+                ? (txRecord.metadata as Record<string, any>)
+                : {}),
+              rejectedAt: new Date().toISOString(),
+              rejectionReason:
+                notes || 'Solicitud de retiro rechazada por el administrador',
+            },
+          },
+        });
+
+        // Registrar devolución en ledger
+        await tx.ledgerTransaction.create({
+          data: {
+            walletId: txRecord.walletId,
+            type: TransactionType.ORDER_REFUND,
+            amount: withdrawAmount,
+            currency: 'EUR',
+            status: TransactionStatus.COMPLETED,
+            referenceId: transactionId,
+            metadata: {
+              action: 'PAYOUT_REJECTION_REFUND',
+              reason: notes || 'Devolución por rechazo de solicitud de retiro',
+            },
+          },
+        });
+
+        // Notificar al profesional
+        const notif = await tx.notification.create({
+          data: {
+            userId: txRecord.wallet.userId,
+            type: NotificationType.SYSTEM_ALERT,
+            title: 'Retiro rechazado - Fondos restablecidos',
+            message: `Tu solicitud de retiro de ${withdrawAmount.toFixed(2)} € ha sido rechazada y los fondos han sido devueltos a tu saldo disponible. Motivo: ${notes || 'Revisión administrativa'}.`,
+            link: '/profile',
+          },
+        });
+        this.realtime?.emitNotification(notif);
+
+        return {
+          success: true,
+          message: 'Retiro rechazado y saldo devuelto a la billetera',
+          transaction: updated,
+        };
+      }
+    });
   }
 }

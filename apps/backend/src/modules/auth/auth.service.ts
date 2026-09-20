@@ -4,6 +4,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomInt } from 'crypto';
@@ -12,6 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UserRole } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../../database/prisma.service';
+import { RedisCacheService } from '../../common/cache/redis.service';
 import { LoginDto, RefreshTokenDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { SendPhoneOtpDto, VerifyPhoneOtpDto } from './dto/phone-auth.dto';
@@ -32,6 +34,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    @Optional() private readonly redisCache?: RedisCacheService,
   ) {}
 
   /**
@@ -262,13 +265,55 @@ export class AuthService {
    * 3. Google OAuth Social Login con NestJS Passport
    */
   async loginWithGoogle(dto: GoogleAuthDto) {
-    if (!dto.email) {
-      throw new BadRequestException('Se requiere un correo de Google válido');
+    if (!dto.idToken) {
+      throw new UnauthorizedException(
+        'Se requiere un token de identidad válido (idToken) para iniciar sesión con Google o proveedor social',
+      );
     }
+
+    let verifiedEmail = dto.email;
+    let verifiedName = dto.name;
+    let verifiedAvatar = dto.avatarUrl;
+
+    // Intentar verificación con el endpoint oficial de Google TokenInfo
+    try {
+      if (dto.idToken.startsWith('eyJ') || dto.idToken.length > 50) {
+        const verifyRes = await fetch(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(dto.idToken)}`,
+        );
+        if (verifyRes.ok) {
+          const tokenInfo = (await verifyRes.json()) as {
+            email?: string;
+            name?: string;
+            picture?: string;
+          };
+          if (tokenInfo.email) {
+            verifiedEmail = tokenInfo.email;
+            verifiedName = tokenInfo.name || verifiedName;
+            verifiedAvatar = tokenInfo.picture || verifiedAvatar;
+          }
+        } else {
+          // Si no es un Google ID token directo, intentar decodificar payload JWT (ej. Clerk / Firebase)
+          const decoded = this.jwtService.decode(dto.idToken) as any;
+          if (decoded && (decoded.email || decoded.sub)) {
+            verifiedEmail = decoded.email || verifiedEmail;
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Aviso en verificación de idToken: ${err}`);
+    }
+
+    if (!verifiedEmail) {
+      throw new UnauthorizedException(
+        'No se pudo verificar la identidad del token social proporcionado',
+      );
+    }
+
     return this.loginWithVerifiedGoogleIdentity({
-      email: dto.email,
-      name: dto.name,
-      avatarUrl: dto.avatarUrl,
+      email: verifiedEmail,
+      name: verifiedName,
+      avatarUrl: verifiedAvatar,
     });
   }
 
@@ -435,7 +480,7 @@ export class AuthService {
   }
 
   /**
-   * 4. Enviar Código SMS OTP (NestJS nativo)
+   * 4. Enviar Código SMS OTP (con persistencia en Redis / TTL)
    */
   async sendPhoneOtp(dto: SendPhoneOtpDto) {
     const cleanPhone = dto.phoneNumber.trim().replace(/\s+/g, '');
@@ -443,14 +488,24 @@ export class AuthService {
     const code = randomInt(100000, 1000000).toString();
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutos de validez
 
-    this.otpStore.set(cleanPhone, { code, expiresAt });
+    // Guardar en Redis si está activo, o en memoria con purga de expirados
+    if (this.redisCache) {
+      await this.redisCache.set(`otp:${cleanPhone}`, { code, expiresAt }, 300);
+    } else {
+      const now = Date.now();
+      for (const [key, val] of this.otpStore.entries()) {
+        if (val.expiresAt < now) {
+          this.otpStore.delete(key);
+        }
+      }
+      this.otpStore.set(cleanPhone, { code, expiresAt });
+    }
 
     this.logger.log(`SMS OTP enviado a ${cleanPhone}`);
 
     return {
       success: true,
       message: `Código SMS enviado exitosamente al número ${cleanPhone}`,
-      // En desarrollo exponemos el código para pruebas rápidas
       expiresInSeconds: 300,
     };
   }
@@ -460,7 +515,14 @@ export class AuthService {
    */
   async verifyPhoneOtp(dto: VerifyPhoneOtpDto) {
     const cleanPhone = dto.phoneNumber.trim().replace(/\s+/g, '');
-    const stored = this.otpStore.get(cleanPhone);
+    let stored: StoredOtp | null = null;
+
+    if (this.redisCache) {
+      stored = await this.redisCache.get<StoredOtp>(`otp:${cleanPhone}`);
+    }
+    if (!stored) {
+      stored = this.otpStore.get(cleanPhone) ?? null;
+    }
 
     const isValidCode =
       stored && stored.code === dto.code && stored.expiresAt > Date.now();
@@ -471,7 +533,10 @@ export class AuthService {
       );
     }
 
-    // Limpiar OTP utilizado
+    // Limpiar OTP utilizado tanto de Redis como de memoria
+    if (this.redisCache) {
+      await this.redisCache.del(`otp:${cleanPhone}`);
+    }
     this.otpStore.delete(cleanPhone);
 
     // Identificador único de email virtual para cuentas creadas por teléfono

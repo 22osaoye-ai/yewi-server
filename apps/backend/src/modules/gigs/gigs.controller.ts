@@ -61,8 +61,7 @@ export class GigsController {
     return this.gigsService.findBySlug(slugOrId);
   }
 
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PROFESSIONAL)
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Post()
   @ApiOperation({

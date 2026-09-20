@@ -51,3 +51,15 @@ export class ResolveDisputeDto {
   @IsNotEmpty()
   resolutionNotes: string;
 }
+
+export class ProcessPayoutDto {
+  @ApiProperty({ enum: ['APPROVE', 'REJECT'], example: 'APPROVE' })
+  @IsEnum(['APPROVE', 'REJECT'])
+  action: 'APPROVE' | 'REJECT';
+
+  @ApiPropertyOptional({ example: 'Transferencia bancaria procesada vía SEPA' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+}
+

@@ -102,4 +102,61 @@ describe('ProfessionalsService', () => {
     );
     expect(prisma.professionalProfile.upsert).not.toHaveBeenCalled();
   });
+
+  it('creates professional profile with fallback bio and taxId when businessName is provided', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-id',
+      roles: ['CLIENT'],
+      professionalProfile: null,
+    });
+    prisma.user.update.mockResolvedValue({ id: 'user-id', roles: ['CLIENT', 'PROFESSIONAL'] });
+    prisma.professionalProfile.upsert.mockResolvedValue({
+      id: 'pro-id',
+      userId: 'user-id',
+      businessName: 'Multiservicios Amalio',
+      taxId: 'B12345678',
+      bio: 'Servicios profesionales de Multiservicios Amalio',
+    });
+
+    const result = await service.updateMyProfile('user-id', {
+      businessName: 'Multiservicios Amalio',
+      taxId: 'B12345678',
+    });
+
+    expect(prisma.professionalProfile.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId: 'user-id' },
+        create: expect.objectContaining({
+          businessName: 'Multiservicios Amalio',
+          taxId: 'B12345678',
+          bio: 'Servicios profesionales de Multiservicios Amalio',
+        }),
+      }),
+    );
+    expect(result.bio).toBe('Servicios profesionales de Multiservicios Amalio');
+  });
+
+  it('persists explicit bio when provided during profile update', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-id',
+      roles: ['CLIENT', 'PROFESSIONAL'],
+      professionalProfile: { id: 'pro-id' },
+    });
+    prisma.professionalProfile.upsert.mockResolvedValue({
+      id: 'pro-id',
+      bio: 'Especialista en reformas con más de 20 años de trayectoria.',
+    });
+
+    await service.updateMyProfile('user-id', {
+      bio: 'Especialista en reformas con más de 20 años de trayectoria.',
+    });
+
+    expect(prisma.professionalProfile.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({
+          bio: 'Especialista en reformas con más de 20 años de trayectoria.',
+        }),
+      }),
+    );
+  });
 });

@@ -54,14 +54,87 @@ export class StatusesService {
   }
 
   /**
-   * Obtener feed de estados agrupados por autor para Home y tab de Estados
+   * Obtener feed de estados agrupados por autor para Home y tab de Estados.
+   * Regla de negocio: Los clientes solo pueden ver estados de contactos reales
+   * (con quienes tienen chats, pedidos o presupuestos) o profesionales a los que siguen.
    */
-  async getFeed(currentUserId?: string): Promise<AuthorStatusFeedGroup[]> {
+  async getFeed(currentUserId?: string, followedIds?: string[]): Promise<AuthorStatusFeedGroup[]> {
     const now = new Date();
+    let authorFilter: any = {};
+
+    if (currentUserId) {
+      const currentUser = await this.prisma.user.findUnique({
+        where: { id: currentUserId },
+        include: {
+          subscription: true,
+          professionalProfile: true,
+        },
+      });
+
+      const isCurrentUserPro = currentUser ? this.hasActiveProAccess(currentUser) : false;
+
+      // Si es un cliente (no profesional Pro), SOLO puede ver estados de sus contactos o a quienes sigue
+      if (currentUser && !isCurrentUserPro) {
+        const contactUserIds = new Set<string>();
+
+        // 1. Contactos de conversaciones de chat
+        const conversations = await this.prisma.conversation.findMany({
+          where: {
+            OR: [{ participantAId: currentUserId }, { participantBId: currentUserId }],
+          },
+          select: { participantAId: true, participantBId: true },
+        });
+        for (const conv of conversations) {
+          const other = conv.participantAId === currentUserId ? conv.participantBId : conv.participantAId;
+          if (other) contactUserIds.add(other);
+        }
+
+        // 2. Profesionales de pedidos (orders)
+        const orders = await this.prisma.order.findMany({
+          where: { clientId: currentUserId },
+          select: { professionalProfile: { select: { userId: true } } },
+        });
+        for (const ord of orders) {
+          if (ord.professionalProfile?.userId) {
+            contactUserIds.add(ord.professionalProfile.userId);
+          }
+        }
+
+        // 3. Profesionales que respondieron a sus solicitudes de servicio (quotes)
+        const quotes = await this.prisma.quoteProposal.findMany({
+          where: { serviceRequest: { clientId: currentUserId } },
+          select: { professionalProfile: { select: { userId: true } } },
+        });
+        for (const q of quotes) {
+          if (q.professionalProfile?.userId) {
+            contactUserIds.add(q.professionalProfile.userId);
+          }
+        }
+
+        // 4. Profesionales o items que sigue / tiene en favoritos
+        if (Array.isArray(followedIds) && followedIds.length > 0) {
+          for (const fid of followedIds) {
+            if (fid && typeof fid === 'string') {
+              contactUserIds.add(fid);
+            }
+          }
+        }
+
+        // Si el cliente no sigue a nadie y no tiene contactos, no ve nada ("no vean nada de los que no les interese")
+        if (contactUserIds.size === 0) {
+          return [];
+        }
+
+        authorFilter = {
+          authorId: { in: Array.from(contactUserIds) },
+        };
+      }
+    }
 
     const statuses = await this.prisma.status.findMany({
       where: {
         expiresAt: { gt: now },
+        ...authorFilter,
       },
       include: {
         author: {

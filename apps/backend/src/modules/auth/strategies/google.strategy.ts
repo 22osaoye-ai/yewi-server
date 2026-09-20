@@ -6,8 +6,8 @@ import { Strategy } from 'passport-google-oauth2';
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   constructor() {
     super({
-      clientID: process.env.GOOGLE_CLIENT_ID || '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      clientID: process.env.GOOGLE_CLIENT_ID || 'mock-google-client-id',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || 'mock-google-client-secret',
       callbackURL:
         process.env.GOOGLE_REDIRECT_URI ||
         'http://localhost:3000/api/v1/auth/google/callback',

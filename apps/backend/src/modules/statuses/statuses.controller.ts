@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -30,8 +31,14 @@ export class StatusesController {
   @Get('feed')
   @ApiOperation({ summary: 'Obtener el feed de historias/estados activos de profesionales' })
   @ApiResponse({ status: 200, description: 'Feed de estados agrupados por profesional' })
-  async getFeed(@CurrentUser('id') userId: string) {
-    return this.statusesService.getFeed(userId);
+  async getFeed(
+    @CurrentUser('id') userId: string,
+    @Query('followedIds') followedIdsRaw?: string,
+  ) {
+    const followedIds = followedIdsRaw
+      ? followedIdsRaw.split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
+    return this.statusesService.getFeed(userId, followedIds);
   }
 
   @Post()

@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  IsBoolean,
   IsNotEmpty,
   IsObject,
   IsOptional,
@@ -37,6 +38,14 @@ export class CreateGigOrderDto {
   @IsOptional()
   @IsObject()
   requirementsAnswers?: Record<string, any>;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Aportación directa a depósito de custodia Escrow',
+  })
+  @IsOptional()
+  @IsBoolean()
+  autoDeposit?: boolean;
 }
 
 export class SubmitRequirementsDto {
@@ -99,3 +108,14 @@ export class OpenDisputeDto {
   @IsString({ each: true })
   evidenceUrls?: string[];
 }
+
+export class CancelOrderDto {
+  @ApiPropertyOptional({
+    example: 'El profesional no completó el trabajo acordado',
+    description: 'Motivo de la cancelación y devolución',
+  })
+  @IsOptional()
+  @IsString()
+  reason?: string;
+}
+

@@ -11,7 +11,11 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { AdminService } from './admin.service';
-import { ResolveDisputeDto, ReviewKycDto } from './dto/review-kyc.dto';
+import {
+  ProcessPayoutDto,
+  ResolveDisputeDto,
+  ReviewKycDto,
+} from './dto/review-kyc.dto';
 
 @ApiTags('Admin (Panel de Control, Métricas GMV, KYC & Disputas)')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -68,4 +72,28 @@ export class AdminController {
   ) {
     return this.adminService.resolveDispute(adminUserId, disputeId, dto);
   }
+
+  @Get('payouts/pending')
+  @ApiOperation({
+    summary: 'Listar solicitudes de retiro de profesionales pendientes de transferir',
+  })
+  async getPendingPayouts() {
+    return this.adminService.getPendingPayouts();
+  }
+
+  @Post('payouts/:id/process')
+  @ApiOperation({
+    summary: 'Aprobar transferencia o rechazar retiro con devolución de saldo',
+  })
+  async processPayout(
+    @Param('id') transactionId: string,
+    @Body() dto: ProcessPayoutDto,
+  ) {
+    return this.adminService.processPayout(
+      transactionId,
+      dto.action,
+      dto.notes,
+    );
+  }
 }
+

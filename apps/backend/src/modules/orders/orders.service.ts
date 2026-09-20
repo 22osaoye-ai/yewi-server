@@ -16,6 +16,7 @@ import {
 import { PrismaService } from '../../database/prisma.service';
 import { RealtimeService } from '../../common/realtime/realtime.service';
 import {
+  CancelOrderDto,
   CreateGigOrderDto,
   OpenDisputeDto,
   RequestRevisionDto,
@@ -34,7 +35,7 @@ export class OrdersService {
    * Crear un nuevo pedido a partir de un paquete de Gig (Fiverr Style)
    */
   async createGigOrder(userId: string, dto: CreateGigOrderDto) {
-    const pkg = await this.prisma.gigPackage.findUnique({
+    let pkg = await this.prisma.gigPackage.findUnique({
       where: { id: dto.gigPackageId },
       include: {
         gig: {
@@ -46,6 +47,27 @@ export class OrdersService {
         },
       },
     });
+
+    if (!pkg) {
+      pkg = await this.prisma.gigPackage.findFirst({
+        where: {
+          OR: [
+            { id: dto.gigPackageId },
+            { gigId: dto.gigPackageId },
+            { gig: { slug: dto.gigPackageId } },
+          ],
+        },
+        include: {
+          gig: {
+            include: {
+              professionalProfile: {
+                include: { user: true },
+              },
+            },
+          },
+        },
+      });
+    }
 
     if (!pkg || !pkg.gig) {
       throw new NotFoundException('Paquete de servicio no encontrado');
@@ -81,12 +103,84 @@ export class OrdersService {
       deliveryDeadline.getDate() + Math.max(1, totalDays),
     );
 
+    let clientWallet = await this.prisma.wallet.findUnique({
+      where: { userId },
+    });
+
+    if (!clientWallet) {
+      clientWallet = await this.prisma.wallet.create({
+        data: {
+          userId,
+          creditBalance: 0,
+          fiatAvailableBalance: 0,
+          fiatPendingBalance: 0,
+        },
+      });
+    }
+
+    const availableBalance = Number(clientWallet.fiatAvailableBalance);
+    const deficit = totalAmount - availableBalance;
+
+    if (deficit > 0 && !dto.autoDeposit) {
+      throw new BadRequestException(
+        `Saldo insuficiente en tu billetera (${availableBalance.toFixed(2)} €) para cubrir este pedido (${totalAmount.toFixed(2)} €) con retención segura en Escrow. Recarga tu saldo en la sección Billetera antes de continuar.`,
+      );
+    }
+
     const orderNumber = `ORD-GIG-${Date.now().toString().slice(-6)}`;
     const hasRequirements =
       !!dto.requirementsAnswers &&
       Object.keys(dto.requirementsAnswers).length > 0;
 
     const result = await this.prisma.$transaction(async (tx) => {
+      // Si se requiere auto-depósito (aportación con tarjeta directa a custodia Escrow)
+      if (deficit > 0) {
+        await tx.wallet.update({
+          where: { id: clientWallet.id },
+          data: {
+            fiatAvailableBalance: { increment: deficit },
+          },
+        });
+
+        await tx.ledgerTransaction.create({
+          data: {
+            walletId: clientWallet.id,
+            type: TransactionType.ORDER_PAYMENT,
+            amount: deficit,
+            currency: 'EUR',
+            status: TransactionStatus.COMPLETED,
+            metadata: {
+              orderNumber,
+              action: 'CARD_ESCROW_DEPOSIT',
+              description: `Aportación con tarjeta a custodia Escrow (${deficit.toFixed(2)} €)`,
+            },
+          },
+        });
+      }
+
+      // 1. Debitar fondos de la billetera del cliente hacia Escrow
+      await tx.wallet.update({
+        where: { id: clientWallet.id },
+        data: {
+          fiatAvailableBalance: { decrement: totalAmount },
+        },
+      });
+
+      // 2. Registrar transacción en el libro mayor
+      await tx.ledgerTransaction.create({
+        data: {
+          walletId: clientWallet.id,
+          type: TransactionType.ORDER_PAYMENT,
+          amount: -totalAmount,
+          currency: 'EUR',
+          status: TransactionStatus.COMPLETED,
+          metadata: {
+            orderNumber,
+            action: 'ESCROW_DEPOSIT',
+          },
+        },
+      });
+
       const order = await tx.order.create({
         data: {
           orderNumber,
@@ -505,5 +599,120 @@ export class OrdersService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * Cancelar un pedido activo y devolver el 100% del saldo de Escrow a la billetera del cliente
+   */
+  async cancelOrder(userId: string, orderId: string, dto?: CancelOrderDto) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        client: {
+          include: { wallet: true },
+        },
+        professionalProfile: {
+          include: { user: true },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Pedido no encontrado');
+    }
+
+    const isClient = order.clientId === userId;
+    const isPro = order.professionalProfile?.user?.id === userId;
+
+    if (!isClient && !isPro) {
+      throw new ForbiddenException(
+        'No estás autorizado para cancelar este pedido',
+      );
+    }
+
+    if (order.status === OrderStatus.COMPLETED) {
+      throw new BadRequestException(
+        'No se puede cancelar un pedido completado con fondos ya liberados',
+      );
+    }
+
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new BadRequestException('El pedido ya ha sido cancelado previamente');
+    }
+
+    const refundAmount = Number(order.totalAmount);
+    const reasonText = dto?.reason?.trim() || 'Cancelación de pedido no realizado';
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Marcar pedido como cancelado y Escrow reembolsado al cliente
+      const updatedOrder = await tx.order.update({
+        where: { id: orderId },
+        data: {
+          status: OrderStatus.CANCELLED,
+          escrowStatus: EscrowStatus.REFUNDED_TO_CLIENT,
+        },
+      });
+
+      // 2. Acreditar reembolso en la billetera del cliente
+      if (order.client.wallet && refundAmount > 0) {
+        await tx.wallet.update({
+          where: { id: order.client.wallet.id },
+          data: {
+            fiatAvailableBalance: { increment: refundAmount },
+          },
+        });
+
+        // 3. Registrar transacción de reembolso en el libro mayor
+        await tx.ledgerTransaction.create({
+          data: {
+            walletId: order.client.wallet.id,
+            type: TransactionType.ORDER_REFUND,
+            amount: refundAmount,
+            currency: 'EUR',
+            status: TransactionStatus.COMPLETED,
+            referenceId: order.id,
+            metadata: {
+              orderNumber: order.orderNumber,
+              action: 'ESCROW_REFUND',
+              reason: reasonText,
+              cancelledBy: isClient ? 'CLIENT' : 'PRO',
+            },
+          },
+        });
+      }
+
+      // 4. Notificaciones para ambas partes
+      const clientNotification = await tx.notification.create({
+        data: {
+          userId: order.clientId,
+          type: NotificationType.SYSTEM_ALERT,
+          title: 'Pedido cancelado y reembolsado',
+          message: `El pedido ${order.orderNumber} ha sido cancelado. Se han acreditado ${refundAmount.toFixed(2)} € a tu billetera.`,
+          link: `/orders/${order.id}`,
+        },
+      });
+
+      let proNotification: any = null;
+      if (order.professionalProfile?.user?.id) {
+        proNotification = await tx.notification.create({
+          data: {
+            userId: order.professionalProfile.user.id,
+            type: NotificationType.SYSTEM_ALERT,
+            title: 'Pedido cancelado',
+            message: `El pedido ${order.orderNumber} ha sido cancelado. Motivo: ${reasonText}.`,
+            link: `/orders/${order.id}`,
+          },
+        });
+      }
+
+      return { updatedOrder, clientNotification, proNotification };
+    });
+
+    this.realtime?.emitNotification(result.clientNotification);
+    if (result.proNotification) {
+      this.realtime?.emitNotification(result.proNotification);
+    }
+
+    return result.updatedOrder;
   }
 }

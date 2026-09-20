@@ -17,6 +17,7 @@ import {
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import {
+  CancelOrderDto,
   CreateGigOrderDto,
   OpenDisputeDto,
   RequestRevisionDto,
@@ -126,4 +127,22 @@ export class OrdersController {
   ) {
     return this.ordersService.openDispute(userId, orderId, dto);
   }
+
+  @Post(':id/cancel')
+  @ApiOperation({
+    summary:
+      'Cancelar pedido activo y reembolsar fondos de Escrow al cliente',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Pedido cancelado y fondos devueltos a la billetera',
+  })
+  async cancelOrder(
+    @CurrentUser('id') userId: string,
+    @Param('id') orderId: string,
+    @Body() dto: CancelOrderDto,
+  ) {
+    return this.ordersService.cancelOrder(userId, orderId, dto);
+  }
 }
+

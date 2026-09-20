@@ -61,3 +61,15 @@ export class RequestPayoutDto {
   @IsNotEmpty()
   destinationAccount: string;
 }
+
+export class DepositFiatDto {
+  @ApiProperty({
+    example: 100.0,
+    description: 'Cantidad en euros a recargar en saldo disponible',
+  })
+  @IsNumber()
+  @IsPositive()
+  @Min(5)
+  amount: number;
+}
+

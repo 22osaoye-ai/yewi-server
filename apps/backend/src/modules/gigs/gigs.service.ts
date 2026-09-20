@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { GigStatus, PackageTier, Prisma } from '@prisma/client';
+import { GigStatus, PackageTier, Prisma, UserRole } from '@prisma/client';
 import { PaginatedResult } from '../../common/dto/pagination.dto';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateGigDto } from './dto/create-gig.dto';
@@ -19,29 +19,85 @@ export class GigsService {
    * Crear un nuevo Gig / Proyecto con paquetes o tarifa directa
    */
   async create(userId: string, dto: CreateGigDto) {
-    const pro = await this.prisma.professionalProfile.findUnique({
+    let pro = await this.prisma.professionalProfile.findUnique({
       where: { userId },
     });
 
     if (!pro) {
-      throw new ForbiddenException(
-        'Debes tener un perfil profesional para publicar proyectos y servicios',
-      );
-    }
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        include: { profile: true },
+      });
 
-    // 1. Resolve Category
-    let targetCategoryId = dto.categoryId;
-    if (!targetCategoryId && dto.category) {
-      const cat = await this.prisma.category.findFirst({
-        where: {
-          OR: [
-            { name: { equals: dto.category, mode: 'insensitive' } },
-            { slug: dto.category.toLowerCase().replace(/[^a-z0-9]+/g, '-') },
-          ],
+      if (!user) {
+        throw new ForbiddenException(
+          'Usuario no encontrado para publicar proyectos y servicios',
+        );
+      }
+
+      pro = await this.prisma.professionalProfile.create({
+        data: {
+          userId,
+          businessName:
+            user.profile?.displayName ||
+            `${user.profile?.firstName || 'Profesional'} ${user.profile?.lastName || ''}`.trim() ||
+            'Profesional Yewi',
+          bio: 'Profesional verificado en Yewi con cobertura local.',
+          city: user.profile?.city || dto.city || 'Zaragoza',
+          postalCode: user.profile?.postalCode || '50001',
+          hourlyRate: 35,
+          serviceRadiusKm: 50,
         },
       });
-      if (cat) {
-        targetCategoryId = cat.id;
+
+      const currentRoles = (user.roles || []) as UserRole[];
+      if (!currentRoles.includes(UserRole.PROFESSIONAL)) {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: {
+            roles: { set: [...currentRoles, UserRole.PROFESSIONAL] },
+            isPro: true,
+          },
+        });
+      }
+    }
+
+    // 1. Resolve Category Safely (never fail foreign key constraint)
+    let targetCategoryId: string | null = null;
+
+    const isUuid =
+      dto.categoryId &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        dto.categoryId,
+      );
+
+    if (isUuid && dto.categoryId) {
+      const catById = await this.prisma.category.findUnique({
+        where: { id: dto.categoryId },
+      });
+      if (catById) {
+        targetCategoryId = catById.id;
+      }
+    }
+
+    if (!targetCategoryId) {
+      const categorySearch = (dto.category || dto.categoryId || '').trim();
+      if (categorySearch) {
+        const cat = await this.prisma.category.findFirst({
+          where: {
+            OR: [
+              { name: { equals: categorySearch, mode: 'insensitive' } },
+              {
+                slug: categorySearch
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, '-'),
+              },
+            ],
+          },
+        });
+        if (cat) {
+          targetCategoryId = cat.id;
+        }
       }
     }
 
@@ -54,8 +110,8 @@ export class GigsService {
       } else {
         const newCat = await this.prisma.category.create({
           data: {
-            name: dto.category || 'General',
-            slug: `${(dto.category || 'general')
+            name: dto.category || dto.categoryId || 'General',
+            slug: `${(dto.category || dto.categoryId || 'general')
               .toLowerCase()
               .replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString(36)}`,
           },

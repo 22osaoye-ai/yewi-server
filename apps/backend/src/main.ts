@@ -13,9 +13,9 @@ async function bootstrap() {
     bodyParser: false,
   });
 
-  // Configurar límite de payload JSON y urlencoded (25MB para fotos de perfil, avatares y portafolio en Base64)
-  app.use(json({ limit: '25mb' }));
-  app.use(urlencoded({ extended: true, limit: '25mb' }));
+  // Configurar límite de payload JSON y urlencoded (10MB seguro para fotos de perfil, avatares y portafolio)
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ extended: true, limit: '10mb' }));
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('port') ?? 3000;

@@ -15,6 +15,9 @@ import {
   Prisma,
   ProposalStatus,
   SubscriptionStatus,
+  TransactionStatus,
+  TransactionType,
+  UserRole,
 } from '@prisma/client';
 import { GeoUtils } from '../../common/utils/geo.utils';
 import { PrismaService } from '../../database/prisma.service';
@@ -35,6 +38,26 @@ export class LeadsService {
    */
   async createRequest(userId: string, dto: CreateServiceRequestDto) {
     const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Prohibir estrictamente que un profesional publique solicitudes de trabajo (solo clientes)
+      const proProfile = await tx.professionalProfile.findUnique({
+        where: { userId },
+        select: { id: true },
+      });
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { isPro: true, roles: true },
+      });
+
+      if (
+        proProfile ||
+        user?.isPro ||
+        user?.roles?.includes(UserRole.PROFESSIONAL)
+      ) {
+        throw new ForbiddenException(
+          'Los profesionales no pueden publicar solicitudes de trabajo. Esta función está reservada exclusivamente a clientes.',
+        );
+      }
+
       const categoryQuery = dto.categoryId || dto.category || 'Electricidad';
       let category = await tx.category.findFirst({
         where: {
@@ -172,6 +195,7 @@ export class LeadsService {
         categories: true,
         user: {
           select: {
+            isPro: true,
             subscription: {
               select: {
                 status: true,
@@ -234,8 +258,8 @@ export class LeadsService {
       ];
     }
 
-    // Si NO es PRO y se filtra por ciudad, mantener filtro. Si es PRO, tiene cobertura nacional libre.
-    if (filter.city && !isPro) {
+    // Filtrar por ciudad si se solicita
+    if (filter.city) {
       where.city = { contains: filter.city.trim(), mode: 'insensitive' };
     }
 
@@ -267,9 +291,9 @@ export class LeadsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Procesar cada oportunidad: PRO tiene datos de contacto directos y cobertura nacional
     const formatted = requests.map((req) => {
-      const isUnlocked = isPro;
+      // Oportunidad visible para cotizar libremente
+      const isUnlocked = true;
       let distanceKm: number | null = null;
 
       if (pro.latitude && pro.longitude && req.latitude && req.longitude) {
@@ -281,12 +305,9 @@ export class LeadsService {
         );
       }
 
-      // Si es PRO, no tiene límite de radio (cobertura nacional total)
-      const isWithinProRadius = isPro
-        ? true
-        : distanceKm !== null
-          ? distanceKm <= pro.serviceRadiusKm
-          : true;
+      const isWithinProRadius = distanceKm !== null
+        ? distanceKm <= (pro.serviceRadiusKm || 50)
+        : true;
 
       return {
         id: req.id,
@@ -305,28 +326,21 @@ export class LeadsService {
         distanceKm,
         isWithinProRadius,
         isUnlockedByMe: isUnlocked,
-        isProBenefit: isPro,
+        isProBenefit: false,
         createdAt: req.createdAt,
         expiresAt: req.expiresAt,
-        client: isUnlocked
-          ? {
-              name:
-                `${req.client.profile?.firstName ?? ''} ${req.client.profile?.lastName ?? ''}`.trim() ||
-                'Cliente Yewi',
-              email: req.client.email,
-              phone: req.client.profile?.phoneNumber || 'No especificado',
-              address: req.address || `${req.city} (${req.postalCode})`,
-            }
-          : {
-              name: `${req.client.profile?.firstName ?? 'Cliente'} ${req.client.profile?.lastName?.[0] ?? ''}.`,
-              email: '***@***.com (Suscríbete a Pro para ver)',
-              phone: '********* (Suscríbete a Pro para ver)',
-              address: `${req.city} (Suscríbete a Pro para ver calle)`,
-            },
+        client: {
+          name:
+            `${req.client.profile?.firstName ?? ''} ${req.client.profile?.lastName ?? ''}`.trim() ||
+            'Cliente Yewi',
+          email: req.client.email,
+          phone: req.client.profile?.phoneNumber || 'Disponible tras presupuesto',
+          address: req.address || `${req.city} (${req.postalCode})`,
+        },
       };
     });
 
-    if (filter.onlyMatchingMyRadius && !isPro) {
+    if (filter.onlyMatchingMyRadius) {
       return formatted.filter((item) => item.isWithinProRadius);
     }
 
@@ -342,6 +356,7 @@ export class LeadsService {
       include: {
         user: {
           select: {
+            isPro: true,
             subscription: {
               select: {
                 status: true,
@@ -459,6 +474,7 @@ export class LeadsService {
       include: {
         user: {
           select: {
+            isPro: true,
             subscription: {
               select: {
                 status: true,
@@ -473,11 +489,6 @@ export class LeadsService {
 
     if (!pro) {
       throw new ForbiddenException('Debes tener un perfil profesional');
-    }
-    if (!this.hasActiveProSubscription(pro)) {
-      throw new ForbiddenException(
-        'Necesitas una suscripción Yewi Pro activa para enviar presupuestos',
-      );
     }
 
     const request = await this.prisma.serviceRequest.findUnique({
@@ -896,7 +907,45 @@ export class LeadsService {
 
     const orderNumber = `ORD-LEAD-${Date.now().toString().slice(-6)}`;
 
+    const clientWallet = await this.prisma.wallet.findUnique({
+      where: { userId },
+    });
+
+    if (!clientWallet) {
+      throw new BadRequestException('Billetera de cliente no encontrada');
+    }
+
+    const availableBalance = Number(clientWallet.fiatAvailableBalance);
+    if (availableBalance < totalAmount) {
+      throw new BadRequestException(
+        `Saldo insuficiente en tu billetera (${availableBalance.toFixed(2)} €) para aceptar este presupuesto (${totalAmount.toFixed(2)} €) con retención en Escrow. Recarga tu saldo antes de continuar.`,
+      );
+    }
+
     const result = await this.prisma.$transaction(async (tx) => {
+      // Debitar fondos del cliente hacia Escrow
+      await tx.wallet.update({
+        where: { id: clientWallet.id },
+        data: {
+          fiatAvailableBalance: { decrement: totalAmount },
+        },
+      });
+
+      // Registrar movimiento de retención en Escrow
+      await tx.ledgerTransaction.create({
+        data: {
+          walletId: clientWallet.id,
+          type: TransactionType.ORDER_PAYMENT,
+          amount: -totalAmount,
+          currency: 'EUR',
+          status: TransactionStatus.COMPLETED,
+          metadata: {
+            orderNumber,
+            action: 'ESCROW_DEPOSIT',
+          },
+        },
+      });
+
       // 1. Aceptar presupuesto y rechazar los demás
       await tx.quoteProposal.update({
         where: { id: proposalId },

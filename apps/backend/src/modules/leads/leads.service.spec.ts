@@ -10,7 +10,8 @@ describe('LeadsService', () => {
   const mockTx: any = {
     category: { findFirst: jest.fn(), create: jest.fn() },
     serviceRequest: { create: jest.fn() },
-    professionalProfile: { findMany: jest.fn() },
+    professionalProfile: { findMany: jest.fn(), findUnique: jest.fn() },
+    user: { findUnique: jest.fn() },
     notification: { create: jest.fn(), createMany: jest.fn() },
     $executeRaw: jest.fn(),
     leadUnlock: { create: jest.fn() },
@@ -185,13 +186,8 @@ describe('LeadsService', () => {
     expect(mockPrisma.quoteProposal.create).toHaveBeenCalled();
   });
 
-  it('should reject sending a proposal when the professional has no active subscription', async () => {
-    mockPrisma.professionalProfile.findUnique.mockResolvedValue({
-      id: 'pro_1',
-      isPro: false,
-      user: { isPro: false, subscription: { status: 'PAST_DUE' } },
-    });
-
+  it('should reject sending a proposal when the user has no professional profile', async () => {
+    mockPrisma.professionalProfile.findUnique.mockResolvedValue(null);
 
     await expect(
       service.sendQuoteProposal('user_pro_1', 'req_1', {
@@ -263,4 +259,17 @@ describe('LeadsService', () => {
       }),
     ).rejects.toThrow('notification unavailable');
   });
+
+  it('should strictly prohibit professionals from creating work requests', async () => {
+    mockTx.professionalProfile.findUnique.mockResolvedValueOnce({ id: 'pro_profile_1' });
+
+    await expect(
+      service.createRequest('pro_user_id', {
+        title: 'Reparar instalación',
+        description: 'No debería permitirse a un profesional publicar solicitudes',
+        category: 'Electricidad',
+      }),
+    ).rejects.toThrow(ForbiddenException);
+  });
 });
+
