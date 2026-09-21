@@ -39,13 +39,16 @@ export class CreateGigOrderDto {
   @IsObject()
   requirementsAnswers?: Record<string, any>;
 
-  @ApiPropertyOptional({
-    example: true,
-    description: 'Aportación directa a depósito de custodia Escrow',
+}
+
+export class ConfirmOrderCheckoutDto {
+  @ApiProperty({
+    example: 'cs_test_a1b2c3d4...',
+    description: 'ID de la sesión de Stripe Checkout completada',
   })
-  @IsOptional()
-  @IsBoolean()
-  autoDeposit?: boolean;
+  @IsString()
+  @IsNotEmpty()
+  sessionId: string;
 }
 
 export class SubmitRequirementsDto {

@@ -93,7 +93,9 @@ export class PaymentsService {
         paymentIntent.amount !== Math.round(expectedAmount * 100) ||
         paymentIntent.currency !== 'eur' ||
         paymentIntent.metadata.userId !== userId ||
-        paymentIntent.metadata.paymentType !== 'CREDIT_PURCHASE'
+        !['CREDIT_PURCHASE', 'GIG_PURCHASE', 'ORDER_PAYMENT'].includes(
+          paymentIntent.metadata.paymentType,
+        )
       ) {
         throw new BadRequestException(
           'El pago no está completado o no corresponde a esta compra',
@@ -277,6 +279,81 @@ export class PaymentsService {
       );
       throw new BadRequestException(`Error de Stripe: ${checkoutErr.message}`);
     }
+  }
+
+  /**
+   * Crear sesión de Stripe Checkout para contratación de Gig con custodia Escrow
+   */
+  async createGigOrderCheckoutSession(params: {
+    userId: string;
+    userEmail?: string;
+    title: string;
+    packageName: string;
+    amount: number;
+    gigPackageId: string;
+    extraIds?: string[];
+    requirementsAnswers?: Record<string, any>;
+  }): Promise<{ url: string; sessionId: string }> {
+    if (!this.stripe) {
+      throw new ServiceUnavailableException(
+        'La pasarela de pagos Stripe no está configurada en el servidor',
+      );
+    }
+
+    try {
+      const amountInCents = Math.round(params.amount * 100);
+      const session = await this.stripe.checkout.sessions.create({
+        mode: 'payment',
+        payment_method_types: ['card'],
+        customer_email: params.userEmail,
+        line_items: [
+          {
+            price_data: {
+              currency: 'eur',
+              unit_amount: amountInCents,
+              product_data: {
+                name: `${params.title} - ${params.packageName}`,
+                description: 'Pago en custodia Escrow protegido por Yewi',
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        metadata: {
+          userId: params.userId,
+          paymentType: 'GIG_ORDER_CHECKOUT',
+          gigPackageId: params.gigPackageId,
+          extraIds: JSON.stringify(params.extraIds || []),
+          requirementsAnswers: JSON.stringify(params.requirementsAnswers || {}),
+        },
+        success_url: 'https://yewi.app/checkout/success?session_id={CHECKOUT_SESSION_ID}',
+        cancel_url: 'https://yewi.app/checkout/cancel',
+      });
+
+      return {
+        url: session.url ?? '',
+        sessionId: session.id,
+      };
+    } catch (checkoutErr: any) {
+      this.logger.error('Error al crear Checkout Session para Gig:', checkoutErr);
+      throw new BadRequestException(`Error de pasarela Stripe: ${checkoutErr.message}`);
+    }
+  }
+
+  /**
+   * Recuperar y verificar estado de una sesión de Stripe Checkout
+   */
+  async retrieveCheckoutSession(
+    sessionId: string,
+  ): Promise<Stripe.Checkout.Session> {
+    if (!this.stripe) {
+      throw new ServiceUnavailableException(
+        'La pasarela de pagos Stripe no está configurada en el servidor',
+      );
+    }
+    return this.stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ['payment_intent'],
+    });
   }
 
   /**
@@ -654,10 +731,15 @@ export class PaymentsService {
 
       switch (event.type) {
         case 'checkout.session.completed': {
-          const session = event.data.object;
+          const session = event.data.object as any;
           const userId = session.metadata?.userId;
+          const paymentType = session.metadata?.paymentType;
 
-          if (userId && session.subscription) {
+          if (paymentType === 'GIG_ORDER_CHECKOUT') {
+            this.logger.log(
+              `Stripe Checkout completado exitosamente para Gig Order (Session: ${session.id}, User: ${userId})`,
+            );
+          } else if (userId && session.subscription) {
             const subscriptionId =
               typeof session.subscription === 'string'
                 ? session.subscription

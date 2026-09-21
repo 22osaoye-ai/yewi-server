@@ -18,6 +18,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import {
   CancelOrderDto,
+  ConfirmOrderCheckoutDto,
   CreateGigOrderDto,
   OpenDisputeDto,
   RequestRevisionDto,
@@ -33,13 +34,46 @@ import { OrdersService } from './orders.service';
 export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
+  @Post('gig/checkout-session')
+  @ApiOperation({
+    summary:
+      'Crear sesión de Stripe Checkout para pagar encargo de Gig con tarjeta',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Sesión de Stripe Checkout generada con éxito',
+  })
+  async createGigCheckoutSession(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateGigOrderDto,
+  ) {
+    return this.ordersService.createGigCheckoutSession(userId, dto);
+  }
+
+  @Post('gig/confirm-checkout')
+  @ApiOperation({
+    summary:
+      'Confirmar sesión de Stripe Checkout completada y materializar pedido en Escrow',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Pedido confirmado y fondos retenidos en Escrow',
+  })
+  async confirmGigCheckout(
+    @CurrentUser('id') userId: string,
+    @Body() dto: ConfirmOrderCheckoutDto,
+  ) {
+    return this.ordersService.confirmGigCheckoutSession(userId, dto.sessionId);
+  }
+
   @Post('gig')
   @ApiOperation({
-    summary: 'Comprar un paquete de Gig y retener fondos en Escrow (Cliente)',
+    summary:
+      'Comprar un paquete de Gig descontando saldo de Billetera y retener en Escrow (Cliente)',
   })
   @ApiResponse({
     status: 201,
-    description: 'Pedido creado exitosamente con fondos en Escrow',
+    description: 'Pedido creado exitosamente con fondos de saldo en Escrow',
   })
   async createGigOrder(
     @CurrentUser('id') userId: string,

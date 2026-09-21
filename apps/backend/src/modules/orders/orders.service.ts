@@ -23,11 +23,13 @@ import {
   SubmitDeliveryDto,
   SubmitRequirementsDto,
 } from './dto/create-gig-order.dto';
+import { PaymentsService } from '../payments/payments.service';
 
 @Injectable()
 export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly paymentsService: PaymentsService,
     @Optional() private readonly realtime?: RealtimeService,
   ) {}
 
@@ -119,11 +121,10 @@ export class OrdersService {
     }
 
     const availableBalance = Number(clientWallet.fiatAvailableBalance);
-    const deficit = totalAmount - availableBalance;
 
-    if (deficit > 0 && !dto.autoDeposit) {
+    if (availableBalance < totalAmount) {
       throw new BadRequestException(
-        `Saldo insuficiente en tu billetera (${availableBalance.toFixed(2)} €) para cubrir este pedido (${totalAmount.toFixed(2)} €) con retención segura en Escrow. Recarga tu saldo en la sección Billetera antes de continuar.`,
+        `Saldo insuficiente en tu billetera (${availableBalance.toFixed(2)} €) para cubrir este pedido (${totalAmount.toFixed(2)} €). Paga con tarjeta mediante Stripe o recarga tu saldo antes de continuar.`,
       );
     }
 
@@ -133,32 +134,7 @@ export class OrdersService {
       Object.keys(dto.requirementsAnswers).length > 0;
 
     const result = await this.prisma.$transaction(async (tx) => {
-      // Si se requiere auto-depósito (aportación con tarjeta directa a custodia Escrow)
-      if (deficit > 0) {
-        await tx.wallet.update({
-          where: { id: clientWallet.id },
-          data: {
-            fiatAvailableBalance: { increment: deficit },
-          },
-        });
-
-        await tx.ledgerTransaction.create({
-          data: {
-            walletId: clientWallet.id,
-            type: TransactionType.ORDER_PAYMENT,
-            amount: deficit,
-            currency: 'EUR',
-            status: TransactionStatus.COMPLETED,
-            metadata: {
-              orderNumber,
-              action: 'CARD_ESCROW_DEPOSIT',
-              description: `Aportación con tarjeta a custodia Escrow (${deficit.toFixed(2)} €)`,
-            },
-          },
-        });
-      }
-
-      // 1. Debitar fondos de la billetera del cliente hacia Escrow
+      // 1. Debitar fondos reales de la billetera del cliente hacia Escrow
       await tx.wallet.update({
         where: { id: clientWallet.id },
         data: {
@@ -176,7 +152,7 @@ export class OrdersService {
           status: TransactionStatus.COMPLETED,
           metadata: {
             orderNumber,
-            action: 'ESCROW_DEPOSIT',
+            action: 'WALLET_ESCROW_DEPOSIT',
           },
         },
       });
@@ -224,6 +200,301 @@ export class OrdersService {
 
       return { order, notification };
     });
+    this.realtime?.emitNotification(result.notification);
+    return result.order;
+  }
+
+  /**
+   * Iniciar sesión de Stripe Checkout para pagar y crear un encargo con custodia Escrow
+   */
+  async createGigCheckoutSession(userId: string, dto: CreateGigOrderDto) {
+    let pkg = await this.prisma.gigPackage.findUnique({
+      where: { id: dto.gigPackageId },
+      include: {
+        gig: {
+          include: {
+            professionalProfile: {
+              include: { user: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!pkg) {
+      pkg = await this.prisma.gigPackage.findFirst({
+        where: {
+          OR: [
+            { id: dto.gigPackageId },
+            { gigId: dto.gigPackageId },
+            { gig: { slug: dto.gigPackageId } },
+          ],
+        },
+        include: {
+          gig: {
+            include: {
+              professionalProfile: {
+                include: { user: true },
+              },
+            },
+          },
+        },
+      });
+    }
+
+    if (!pkg || !pkg.gig) {
+      throw new NotFoundException('Paquete de servicio no encontrado');
+    }
+
+    if (pkg.gig.professionalProfile.userId === userId) {
+      throw new BadRequestException('No puedes comprar tu propio servicio');
+    }
+
+    let subtotal = Number(pkg.price);
+
+    if (dto.extraIds && dto.extraIds.length > 0) {
+      const extras = await this.prisma.gigExtra.findMany({
+        where: { id: { in: dto.extraIds }, gigId: pkg.gigId },
+      });
+      for (const ext of extras) {
+        subtotal += Number(ext.price);
+      }
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { profile: true },
+    });
+
+    return this.paymentsService.createGigOrderCheckoutSession({
+      userId,
+      userEmail: user?.email,
+      title: pkg.gig.title,
+      packageName: pkg.name,
+      amount: subtotal,
+      gigPackageId: pkg.id,
+      extraIds: dto.extraIds,
+      requirementsAnswers: dto.requirementsAnswers,
+    });
+  }
+
+  /**
+   * Confirmar sesión de Stripe Checkout y materializar la orden con fondos reales en Escrow
+   */
+  async confirmGigCheckoutSession(userId: string, sessionId: string) {
+    const session =
+      await this.paymentsService.retrieveCheckoutSession(sessionId);
+
+    if (!session) {
+      throw new NotFoundException('Sesión de pago no encontrada en Stripe');
+    }
+
+    if (session.payment_status !== 'paid') {
+      throw new BadRequestException(
+        'El pago en la pasarela de Stripe no ha sido completado.',
+      );
+    }
+
+    if (session.metadata?.userId !== userId) {
+      throw new ForbiddenException(
+        'Esta sesión de pago no corresponde a tu usuario.',
+      );
+    }
+
+    const gigPackageId = session.metadata?.gigPackageId;
+    if (!gigPackageId) {
+      throw new BadRequestException('Metadata de sesión de Stripe inválida');
+    }
+
+    const paymentIntentId =
+      typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : (session.payment_intent as any)?.id;
+
+    // Idempotencia: Verificar si ya existe una orden creada con esta sesión o PaymentIntent
+    const existingLedger = await this.prisma.ledgerTransaction.findFirst({
+      where: {
+        OR: [
+          ...(paymentIntentId
+            ? [{ stripePaymentIntentId: paymentIntentId }]
+            : []),
+          {
+            metadata: {
+              path: ['sessionId'],
+              equals: sessionId,
+            },
+          },
+        ],
+      },
+    });
+
+    if (existingLedger?.referenceId) {
+      const existingOrder = await this.prisma.order.findUnique({
+        where: { id: existingLedger.referenceId },
+        include: {
+          gig: true,
+          gigPackage: true,
+          professionalProfile: {
+            include: { user: true },
+          },
+        },
+      });
+      if (existingOrder) {
+        return existingOrder;
+      }
+    }
+
+    const pkg = await this.prisma.gigPackage.findUnique({
+      where: { id: gigPackageId },
+      include: {
+        gig: {
+          include: {
+            professionalProfile: {
+              include: { user: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!pkg || !pkg.gig) {
+      throw new NotFoundException('Paquete de servicio no encontrado');
+    }
+
+    let extraIds: string[] = [];
+    try {
+      if (session.metadata?.extraIds) {
+        extraIds = JSON.parse(session.metadata.extraIds);
+      }
+    } catch {}
+
+    let requirementsAnswers: Record<string, any> = {};
+    try {
+      if (session.metadata?.requirementsAnswers) {
+        requirementsAnswers = JSON.parse(session.metadata.requirementsAnswers);
+      }
+    } catch {}
+
+    let subtotal = Number(pkg.price);
+    let totalDays = pkg.deliveryDays;
+
+    if (extraIds.length > 0) {
+      const extras = await this.prisma.gigExtra.findMany({
+        where: { id: { in: extraIds }, gigId: pkg.gigId },
+      });
+      for (const ext of extras) {
+        subtotal += Number(ext.price);
+        totalDays += ext.additionalDeliveryDays;
+      }
+    }
+
+    const platformCommissionPercent = 15;
+    const platformFee =
+      Math.round(subtotal * (platformCommissionPercent / 100) * 100) / 100;
+    const proEarnings = Math.round((subtotal - platformFee) * 100) / 100;
+    const totalAmount = subtotal;
+
+    const deliveryDeadline = new Date();
+    deliveryDeadline.setDate(
+      deliveryDeadline.getDate() + Math.max(1, totalDays),
+    );
+
+    let clientWallet = await this.prisma.wallet.findUnique({
+      where: { userId },
+    });
+
+    if (!clientWallet) {
+      clientWallet = await this.prisma.wallet.create({
+        data: {
+          userId,
+          creditBalance: 0,
+          fiatAvailableBalance: 0,
+          fiatPendingBalance: 0,
+        },
+      });
+    }
+
+    const orderNumber = `ORD-GIG-${Date.now().toString().slice(-6)}`;
+    const hasRequirements =
+      !!requirementsAnswers && Object.keys(requirementsAnswers).length > 0;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Registrar transacción en el libro mayor con el ID de Stripe real
+      const ledgerTx = await tx.ledgerTransaction.create({
+        data: {
+          walletId: clientWallet.id,
+          type: TransactionType.ORDER_PAYMENT,
+          amount: -totalAmount,
+          currency: 'EUR',
+          status: TransactionStatus.COMPLETED,
+          stripePaymentIntentId: paymentIntentId ?? null,
+          metadata: {
+            orderNumber,
+            sessionId,
+            stripePaymentIntentId: paymentIntentId ?? null,
+            action: 'STRIPE_ESCROW_DEPOSIT',
+          },
+        },
+      });
+
+      // 2. Crear orden con fondos retenidos en Escrow
+      const order = await tx.order.create({
+        data: {
+          orderNumber,
+          clientId: userId,
+          professionalProfileId: pkg.gig.professionalProfileId,
+          orderType: OrderType.GIG_PURCHASE,
+          gigId: pkg.gigId,
+          gigPackageId: pkg.id,
+          status: hasRequirements
+            ? OrderStatus.IN_PROGRESS
+            : OrderStatus.PENDING_REQUIREMENTS,
+          subtotal,
+          platformFee,
+          totalAmount,
+          proEarnings,
+          escrowStatus: EscrowStatus.HELD,
+          requirementsAnswers,
+          deliveryDeadline,
+        },
+        include: {
+          gig: true,
+          gigPackage: true,
+          professionalProfile: {
+            include: { user: true },
+          },
+        },
+      });
+
+      // 3. Vincular orderId a la transacción del ledger
+      await tx.ledgerTransaction.update({
+        where: { id: ledgerTx.id },
+        data: { referenceId: order.id },
+      });
+
+      // 4. Crear conversación vinculada al pedido
+      await tx.conversation.create({
+        data: {
+          orderId: order.id,
+          participantAId: userId,
+          participantBId: pkg.gig.professionalProfile.userId,
+        },
+      });
+
+      // 5. Notificar al profesional
+      const notification = await tx.notification.create({
+        data: {
+          userId: pkg.gig.professionalProfile.userId,
+          type: NotificationType.ORDER_CREATED,
+          title: '¡Tienes un nuevo pedido pagado!',
+          message: `Has recibido un nuevo pedido de ${totalAmount} € para tu servicio "${pkg.gig.title}". Fondos retenidos en Escrow.`,
+          link: `/orders/${order.id}`,
+        },
+      });
+
+      return { order, notification };
+    });
+
     this.realtime?.emitNotification(result.notification);
     return result.order;
   }

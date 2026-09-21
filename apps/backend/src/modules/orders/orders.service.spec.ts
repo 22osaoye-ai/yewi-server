@@ -15,9 +15,15 @@ describe('OrdersService - Escrow, Payouts & Refunds', () => {
     wallet: {
       findUnique: jest.fn(),
       update: jest.fn(),
+      create: jest.fn(),
     },
     ledgerTransaction: {
       create: jest.fn(),
+      findFirst: jest.fn(),
+      update: jest.fn(),
+    },
+    user: {
+      findUnique: jest.fn(),
     },
     order: {
       create: jest.fn(),
@@ -26,6 +32,10 @@ describe('OrdersService - Escrow, Payouts & Refunds', () => {
       findMany: jest.fn(),
     },
     conversation: {
+      create: jest.fn(),
+      findFirst: jest.fn(),
+    },
+    message: {
       create: jest.fn(),
     },
     notification: {
@@ -45,9 +55,14 @@ describe('OrdersService - Escrow, Payouts & Refunds', () => {
     emitNotification: jest.fn(),
   } as any;
 
+  const mockPayments = {
+    createGigOrderCheckoutSession: jest.fn(),
+    retrieveCheckoutSession: jest.fn(),
+  } as any;
+
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new OrdersService(mockPrisma, mockRealtime);
+    service = new OrdersService(mockPrisma, mockPayments, mockRealtime);
   });
 
   describe('createGigOrder (Escrow Hold)', () => {
@@ -79,6 +94,118 @@ describe('OrdersService - Escrow, Payouts & Refunds', () => {
 
       expect(mockPrisma.wallet.update).not.toHaveBeenCalled();
       expect(mockPrisma.order.create).not.toHaveBeenCalled();
+    });
+
+    it('creates a Stripe Checkout session for a gig package with Escrow custody metadata', async () => {
+      mockPrisma.gigPackage.findUnique.mockResolvedValue({
+        id: 'pkg-1',
+        name: 'Básico',
+        price: 195,
+        deliveryDays: 3,
+        gigId: 'gig-1',
+        gig: {
+          title: 'Diseño Web Pro',
+          professionalProfileId: 'pro-profile-1',
+          professionalProfile: {
+            userId: 'pro-user-1',
+            user: { id: 'pro-user-1' },
+          },
+        },
+      });
+
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'client-user-1',
+        email: 'client@yewi.app',
+        profile: { firstName: 'Cliente', lastName: 'Pruebas' },
+      });
+
+      mockPayments.createGigOrderCheckoutSession.mockResolvedValue({
+        url: 'https://checkout.stripe.com/c/pay/cs_test_123',
+        sessionId: 'cs_test_123',
+      });
+
+      const res = await service.createGigCheckoutSession('client-user-1', {
+        gigPackageId: 'pkg-1',
+      });
+
+      expect(res.sessionId).toBe('cs_test_123');
+      expect(mockPayments.createGigOrderCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'client-user-1',
+          gigPackageId: 'pkg-1',
+          amount: 195,
+        }),
+      );
+    });
+
+    it('confirms a paid Stripe Checkout session and creates an Order with funds in Escrow', async () => {
+      mockPayments.retrieveCheckoutSession.mockResolvedValue({
+        id: 'cs_test_paid_123',
+        payment_status: 'paid',
+        payment_intent: 'pi_real_stripe_456',
+        metadata: {
+          userId: 'client-user-1',
+          gigPackageId: 'pkg-1',
+        },
+      });
+
+      mockPrisma.ledgerTransaction.findFirst.mockResolvedValue(null);
+
+      mockPrisma.gigPackage.findUnique.mockResolvedValue({
+        id: 'pkg-1',
+        name: 'Básico',
+        price: 195,
+        deliveryDays: 3,
+        gigId: 'gig-1',
+        gig: {
+          title: 'Diseño Web Pro',
+          professionalProfileId: 'pro-profile-1',
+          professionalProfile: {
+            userId: 'pro-user-1',
+            user: { id: 'pro-user-1' },
+          },
+        },
+      });
+
+      mockPrisma.wallet.findUnique.mockResolvedValue({
+        id: 'wallet-client-1',
+        userId: 'client-user-1',
+        fiatAvailableBalance: 0,
+      });
+
+      mockPrisma.ledgerTransaction.create.mockResolvedValue({ id: 'ledger-stripe-1' });
+      mockPrisma.ledgerTransaction.update.mockResolvedValue({ id: 'ledger-stripe-1' });
+      mockPrisma.order.create.mockResolvedValue({
+        id: 'order-stripe-1',
+        orderNumber: 'ORD-GIG-789012',
+        clientId: 'client-user-1',
+        totalAmount: 195,
+        escrowStatus: EscrowStatus.HELD,
+        status: OrderStatus.PENDING_REQUIREMENTS,
+      });
+      mockPrisma.conversation.findFirst.mockResolvedValue(null);
+      mockPrisma.conversation.create.mockResolvedValue({ id: 'conv-1' });
+      mockPrisma.message.create.mockResolvedValue({ id: 'msg-1' });
+      mockPrisma.notification.create.mockResolvedValue({ id: 'notif-1' });
+
+      const confirmedOrder = await service.confirmGigCheckoutSession(
+        'client-user-1',
+        'cs_test_paid_123',
+      );
+
+      expect(confirmedOrder.id).toBe('order-stripe-1');
+      expect(mockPrisma.ledgerTransaction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            stripePaymentIntentId: 'pi_real_stripe_456',
+            status: TransactionStatus.COMPLETED,
+            metadata: expect.objectContaining({
+              action: 'STRIPE_ESCROW_DEPOSIT',
+              sessionId: 'cs_test_paid_123',
+            }),
+          }),
+        }),
+      );
     });
 
     it('holds funds in Escrow and creates order when client has sufficient balance', async () => {
@@ -131,7 +258,7 @@ describe('OrdersService - Escrow, Payouts & Refunds', () => {
             type: TransactionType.ORDER_PAYMENT,
             amount: -100,
             status: TransactionStatus.COMPLETED,
-            metadata: expect.objectContaining({ action: 'ESCROW_DEPOSIT' }),
+            metadata: expect.objectContaining({ action: 'WALLET_ESCROW_DEPOSIT' }),
           }),
         }),
       );
