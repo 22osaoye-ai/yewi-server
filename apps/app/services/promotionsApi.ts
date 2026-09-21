@@ -9,7 +9,8 @@ export interface SellerPromotion {
   promoCode?: string | null;
   category?: string | null;
   badge?: string | null;
-  expiresAt: string;
+  isPermanent?: boolean;
+  expiresAt?: string | null;
   createdAt: string;
   professional?: {
     id: string;
@@ -31,7 +32,8 @@ export interface CreatePromotionPayload {
   promoCode?: string;
   category?: string;
   badge?: string;
-  expiresAt: string;
+  isPermanent?: boolean;
+  expiresAt?: string;
 }
 
 export const promotionsApi = {
