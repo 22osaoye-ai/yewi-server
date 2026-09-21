@@ -390,6 +390,14 @@ export class GigsService {
             },
             portfolioItems: true,
             categories: true,
+            promotions: {
+              where: {
+                isActive: true,
+                expiresAt: { gt: new Date() },
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+            },
           },
         },
         reviews: {

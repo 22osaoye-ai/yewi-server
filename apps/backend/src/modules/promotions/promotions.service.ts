@@ -36,18 +36,29 @@ export class PromotionsService {
       throw new ForbiddenException('Debes tener un perfil profesional para crear promociones');
     }
 
-    const expiresAtDate = new Date(dto.expiresAt);
-    if (isNaN(expiresAtDate.getTime()) || expiresAtDate <= new Date()) {
-      throw new BadRequestException('La fecha de vencimiento debe ser futura');
+    let expiresAtDate: Date;
+    if (dto.isPermanent) {
+      expiresAtDate = new Date('2099-12-31T23:59:59.000Z');
+    } else if (dto.expiresAt) {
+      expiresAtDate = new Date(dto.expiresAt);
+      if (isNaN(expiresAtDate.getTime()) || expiresAtDate <= new Date()) {
+        throw new BadRequestException('La fecha de vencimiento debe ser futura');
+      }
+    } else {
+      // Por defecto si no es permanente y no viene fecha, 30 días
+      expiresAtDate = new Date();
+      expiresAtDate.setDate(expiresAtDate.getDate() + 30);
     }
 
     const badge =
       dto.badge ||
-      (dto.discountPercent
-        ? `-${dto.discountPercent}% DTO`
-        : dto.discountAmount
-        ? `-${dto.discountAmount}€ DTO`
-        : 'OFERTA LIMITADA');
+      (dto.isPermanent
+        ? (dto.discountPercent ? `-${dto.discountPercent}% PERMANENTE` : 'DESCUENTO PERMANENTE')
+        : (dto.discountPercent
+          ? `-${dto.discountPercent}% DTO`
+          : dto.discountAmount
+          ? `-${dto.discountAmount}€ DTO`
+          : 'OFERTA LIMITADA'));
 
     const promo = await this.prisma.promotion.create({
       data: {
@@ -181,32 +192,36 @@ export class PromotionsService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return promotions.map((promo) => ({
-      id: promo.id,
-      title: promo.title,
-      description: promo.description,
-      discountPercent: promo.discountPercent,
-      discountAmount: promo.discountAmount ? Number(promo.discountAmount) : null,
-      promoCode: promo.promoCode,
-      category: promo.category || 'General',
-      badge: promo.badge || 'PROMO',
-      expiresAt: promo.expiresAt,
-      createdAt: promo.createdAt,
-      professional: {
-        id: promo.professionalProfile.id,
-        userId: promo.professionalProfile.userId,
-        name:
-          promo.professionalProfile.businessName ||
-          promo.professionalProfile.user.profile?.displayName ||
-          `${promo.professionalProfile.user.profile?.firstName ?? ''} ${promo.professionalProfile.user.profile?.lastName ?? ''}`.trim() ||
-          'Profesional Yewi',
-        avatarUrl: promo.professionalProfile.user.profile?.avatarUrl,
-        city: promo.professionalProfile.city || promo.professionalProfile.user.profile?.city || 'Zaragoza',
-        avgRating: promo.professionalProfile.avgRating,
-        totalReviews: promo.professionalProfile.totalReviews,
-        isPro: promo.professionalProfile.isPro,
-      },
-    }));
+    return promotions.map((promo) => {
+      const isPermanent = promo.expiresAt.getFullYear() >= 2099;
+      return {
+        id: promo.id,
+        title: promo.title,
+        description: promo.description,
+        discountPercent: promo.discountPercent,
+        discountAmount: promo.discountAmount ? Number(promo.discountAmount) : null,
+        promoCode: promo.promoCode,
+        category: promo.category || 'General',
+        badge: promo.badge || (isPermanent ? 'PERMANENTE' : 'OFERTA'),
+        isPermanent,
+        expiresAt: isPermanent ? null : promo.expiresAt,
+        createdAt: promo.createdAt,
+        professional: {
+          id: promo.professionalProfile.id,
+          userId: promo.professionalProfile.userId,
+          name:
+            promo.professionalProfile.businessName ||
+            promo.professionalProfile.user.profile?.displayName ||
+            `${promo.professionalProfile.user.profile?.firstName ?? ''} ${promo.professionalProfile.user.profile?.lastName ?? ''}`.trim() ||
+            'Profesional Yewi',
+          avatarUrl: promo.professionalProfile.user.profile?.avatarUrl,
+          city: promo.professionalProfile.city || promo.professionalProfile.user.profile?.city || 'Zaragoza',
+          avgRating: promo.professionalProfile.avgRating,
+          totalReviews: promo.professionalProfile.totalReviews,
+          isPro: promo.professionalProfile.isPro,
+        },
+      };
+    });
   }
 
   /**

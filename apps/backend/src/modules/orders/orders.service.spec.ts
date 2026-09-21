@@ -17,6 +17,9 @@ describe('OrdersService - Escrow, Payouts & Refunds', () => {
       update: jest.fn(),
       create: jest.fn(),
     },
+    promotion: {
+      findFirst: jest.fn(),
+    },
     ledgerTransaction: {
       create: jest.fn(),
       findFirst: jest.fn(),
@@ -62,6 +65,7 @@ describe('OrdersService - Escrow, Payouts & Refunds', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPrisma.promotion.findFirst.mockResolvedValue(null);
     service = new OrdersService(mockPrisma, mockPayments, mockRealtime);
   });
 
@@ -134,6 +138,54 @@ describe('OrdersService - Escrow, Payouts & Refunds', () => {
           userId: 'client-user-1',
           gigPackageId: 'pkg-1',
           amount: 195,
+        }),
+      );
+    });
+
+    it('automatically applies active promotion discount when creating Stripe Checkout session', async () => {
+      mockPrisma.gigPackage.findUnique.mockResolvedValue({
+        id: 'pkg-1',
+        name: 'Básico',
+        price: 200,
+        deliveryDays: 3,
+        gigId: 'gig-1',
+        gig: {
+          title: 'Diseño Web Pro',
+          professionalProfileId: 'pro-profile-1',
+          professionalProfile: {
+            userId: 'pro-user-1',
+            user: { id: 'pro-user-1' },
+          },
+        },
+      });
+
+      mockPrisma.promotion.findFirst.mockResolvedValue({
+        id: 'promo-1',
+        title: 'Descuento Especial',
+        discountPercent: 20,
+        badge: '-20% DTO',
+        isActive: true,
+      });
+
+      mockPrisma.user.findUnique.mockResolvedValue({
+        id: 'client-user-1',
+        email: 'client@yewi.app',
+      });
+
+      mockPayments.createGigOrderCheckoutSession.mockResolvedValue({
+        url: 'https://checkout.stripe.com/c/pay/cs_test_discount_123',
+        sessionId: 'cs_test_discount_123',
+      });
+
+      const res = await service.createGigCheckoutSession('client-user-1', {
+        gigPackageId: 'pkg-1',
+      });
+
+      expect(res.sessionId).toBe('cs_test_discount_123');
+      expect(mockPayments.createGigOrderCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: 160,
+          title: expect.stringContaining('-20% DTO'),
         }),
       );
     });

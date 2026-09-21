@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsDateString,
   IsNotEmpty,
   IsNumber,
@@ -16,7 +17,7 @@ export class CreatePromotionDto {
   title: string;
 
   @ApiProperty({
-    example: 'Descuento especial por tiempo limitado en instalación y puesta en marcha de climatización.',
+    example: 'Descuento especial por tiempo limitado o permanente en instalación.',
   })
   @IsString()
   @IsNotEmpty()
@@ -50,8 +51,13 @@ export class CreatePromotionDto {
   @IsString()
   badge?: string;
 
-  @ApiProperty({ example: '2026-09-15T23:59:59.000Z', description: 'Fecha límite de la promoción' })
+  @ApiPropertyOptional({ example: true, description: 'Indica si el descuento es permanente' })
+  @IsOptional()
+  @IsBoolean()
+  isPermanent?: boolean;
+
+  @ApiPropertyOptional({ example: '2026-09-15T23:59:59.000Z', description: 'Fecha límite de la promoción (obligatoria si no es permanente)' })
+  @IsOptional()
   @IsDateString()
-  @IsNotEmpty()
-  expiresAt: string;
+  expiresAt?: string;
 }

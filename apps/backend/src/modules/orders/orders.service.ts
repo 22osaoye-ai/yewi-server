@@ -95,11 +95,38 @@ export class OrdersService {
       }
     }
 
+    // Buscar si el profesional tiene un descuento o promoción activa
+    const activePromo = await this.prisma.promotion.findFirst({
+      where: {
+        professionalProfileId: pkg.gig.professionalProfileId,
+        isActive: true,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let discountAmount = 0;
+    if (activePromo) {
+      if (activePromo.discountPercent && activePromo.discountPercent > 0) {
+        discountAmount =
+          Math.round(subtotal * (activePromo.discountPercent / 100) * 100) / 100;
+      } else if (
+        activePromo.discountAmount &&
+        Number(activePromo.discountAmount) > 0
+      ) {
+        discountAmount = Math.min(subtotal, Number(activePromo.discountAmount));
+      }
+    }
+
+    const finalAmount = Math.max(
+      1,
+      Math.round((subtotal - discountAmount) * 100) / 100,
+    );
     const platformCommissionPercent = 15;
     const platformFee =
-      Math.round(subtotal * (platformCommissionPercent / 100) * 100) / 100;
-    const proEarnings = Math.round((subtotal - platformFee) * 100) / 100;
-    const totalAmount = subtotal;
+      Math.round(finalAmount * (platformCommissionPercent / 100) * 100) / 100;
+    const proEarnings = Math.round((finalAmount - platformFee) * 100) / 100;
+    const totalAmount = finalAmount;
 
     const deliveryDeadline = new Date();
     deliveryDeadline.setDate(
@@ -263,17 +290,49 @@ export class OrdersService {
       }
     }
 
+    // Buscar si el profesional tiene un descuento o promoción activa
+    const activePromo = await this.prisma.promotion.findFirst({
+      where: {
+        professionalProfileId: pkg.gig.professionalProfileId,
+        isActive: true,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let discountAmount = 0;
+    if (activePromo) {
+      if (activePromo.discountPercent && activePromo.discountPercent > 0) {
+        discountAmount =
+          Math.round(subtotal * (activePromo.discountPercent / 100) * 100) / 100;
+      } else if (
+        activePromo.discountAmount &&
+        Number(activePromo.discountAmount) > 0
+      ) {
+        discountAmount = Math.min(subtotal, Number(activePromo.discountAmount));
+      }
+    }
+
+    const finalAmount = Math.max(
+      1,
+      Math.round((subtotal - discountAmount) * 100) / 100,
+    );
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { profile: true },
     });
 
+    const displayTitle = activePromo
+      ? `${pkg.gig.title} (${activePromo.badge || `-${activePromo.discountPercent}%`})`
+      : pkg.gig.title;
+
     return this.paymentsService.createGigOrderCheckoutSession({
       userId,
       userEmail: user?.email,
-      title: pkg.gig.title,
+      title: displayTitle,
       packageName: pkg.name,
-      amount: subtotal,
+      amount: finalAmount,
       gigPackageId: pkg.id,
       extraIds: dto.extraIds,
       requirementsAnswers: dto.requirementsAnswers,
@@ -390,11 +449,14 @@ export class OrdersService {
       }
     }
 
+    const totalAmount =
+      session.amount_total !== undefined && session.amount_total !== null
+        ? session.amount_total / 100
+        : subtotal;
     const platformCommissionPercent = 15;
     const platformFee =
-      Math.round(subtotal * (platformCommissionPercent / 100) * 100) / 100;
-    const proEarnings = Math.round((subtotal - platformFee) * 100) / 100;
-    const totalAmount = subtotal;
+      Math.round(totalAmount * (platformCommissionPercent / 100) * 100) / 100;
+    const proEarnings = Math.round((totalAmount - platformFee) * 100) / 100;
 
     const deliveryDeadline = new Date();
     deliveryDeadline.setDate(
