@@ -57,6 +57,7 @@ export class OrdersService {
             { id: dto.gigPackageId },
             { gigId: dto.gigPackageId },
             { gig: { slug: dto.gigPackageId } },
+            ...(dto.gigId ? [{ gigId: dto.gigId }] : []),
           ],
         },
         include: {
@@ -228,6 +229,7 @@ export class OrdersService {
             { id: dto.gigPackageId },
             { gigId: dto.gigPackageId },
             { gig: { slug: dto.gigPackageId } },
+            ...(dto.gigId ? [{ gigId: dto.gigId }] : []),
           ],
         },
         include: {

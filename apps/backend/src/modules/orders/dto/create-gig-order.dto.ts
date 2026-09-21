@@ -18,6 +18,14 @@ export class CreateGigOrderDto {
   gigPackageId: string;
 
   @ApiPropertyOptional({
+    example: 'ID_DEL_GIG',
+    description: 'ID del gig o proyecto para resolución de paquete',
+  })
+  @IsOptional()
+  @IsString()
+  gigId?: string;
+
+  @ApiPropertyOptional({
     example: ['ID_EXTRA_1', 'ID_EXTRA_2'],
     description: 'IDs de extras opcionales añadidos',
   })
