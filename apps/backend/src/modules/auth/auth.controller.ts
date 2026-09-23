@@ -21,6 +21,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
 import { LoginDto, RefreshTokenDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { CheckAvailabilityDto } from './dto/check-availability.dto';
 import { SendPhoneOtpDto, VerifyPhoneOtpDto } from './dto/phone-auth.dto';
 import { GoogleAuthDto } from './dto/google-auth.dto';
 import { GoogleAuthGuard } from './guards/google-auth/google-auth.guard';
@@ -29,6 +30,20 @@ import { GoogleAuthGuard } from './guards/google-auth/google-auth.guard';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('check-availability')
+  @ApiOperation({
+    summary: 'Comprobar disponibilidad de email, teléfono y NIF/CIF en tiempo real',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Estado de disponibilidad devuelto exitosamente',
+  })
+  async checkAvailability(@Body() dto: CheckAvailabilityDto) {
+    return this.authService.checkAvailability(dto);
+  }
 
   @Public()
   @Post('register')

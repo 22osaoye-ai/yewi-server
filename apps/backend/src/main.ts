@@ -14,7 +14,15 @@ async function bootstrap() {
   });
 
   // Configurar límite de payload JSON y urlencoded (10MB seguro para fotos de perfil, avatares y portafolio)
-  app.use(json({ limit: '10mb' }));
+  // Se preserva req.rawBody para verificación criptográfica de firmas de webhooks (Stripe HMAC-SHA256)
+  app.use(
+    json({
+      limit: '10mb',
+      verify: (req: any, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
   app.use(urlencoded({ extended: true, limit: '10mb' }));
 
   const configService = app.get(ConfigService);

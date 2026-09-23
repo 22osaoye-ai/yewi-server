@@ -6,9 +6,13 @@ import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../database/prisma.service';
 import { PaymentsService } from './payments.service';
+import { OrdersService } from '../orders/orders.service';
 
 describe('PaymentsService', () => {
   let service: PaymentsService;
+  const mockOrdersService = {
+    confirmGigCheckoutSession: jest.fn(),
+  };
 
   const mockConfig = {
     get: jest.fn((key: string) => {
@@ -18,11 +22,13 @@ describe('PaymentsService', () => {
   };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentsService,
         { provide: ConfigService, useValue: mockConfig },
         { provide: PrismaService, useValue: {} },
+        { provide: OrdersService, useValue: mockOrdersService },
       ],
     }).compile();
 

@@ -13,7 +13,14 @@ describe('AuthService', () => {
   const mockPrisma = {
     user: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       update: jest.fn(),
+    },
+    profile: {
+      findFirst: jest.fn(),
+    },
+    professionalProfile: {
+      findFirst: jest.fn(),
     },
     $transaction: jest.fn(),
   };
@@ -79,5 +86,46 @@ describe('AuthService', () => {
         password: 'WrongPassword!',
       }),
     ).rejects.toThrow(UnauthorizedException);
+  });
+
+  describe('checkAvailability', () => {
+    it('should return available: false if email already exists', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue({ id: 'u1', email: 'test@example.com' });
+
+      const res = await service.checkAvailability({ email: 'test@example.com' });
+      expect(res.email).toBeDefined();
+      expect(res.email?.available).toBe(false);
+      expect(res.email?.message).toBe('Correo ya registrado');
+    });
+
+    it('should return available: true if email does not exist', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue(null);
+
+      const res = await service.checkAvailability({ email: 'free@example.com' });
+      expect(res.email).toBeDefined();
+      expect(res.email?.available).toBe(true);
+      expect(res.email?.message).toBe('Disponible');
+    });
+
+    it('should return available: false if phone is registered in Spain', async () => {
+      mockPrisma.profile.findFirst.mockResolvedValue({ id: 'p1', phoneNumber: '+34600112233' });
+
+      const res = await service.checkAvailability({
+        country: 'España',
+        phoneNumber: '+34600112233',
+      });
+      expect(res.phoneNumber).toBeDefined();
+      expect(res.phoneNumber?.available).toBe(false);
+      expect(res.phoneNumber?.message).toBe('Teléfono ya registrado');
+    });
+
+    it('should return available: false if taxId is registered', async () => {
+      mockPrisma.professionalProfile.findFirst.mockResolvedValue({ id: 'pro1', taxId: '12345678Z' });
+
+      const res = await service.checkAvailability({ taxId: '12345678Z' });
+      expect(res.taxId).toBeDefined();
+      expect(res.taxId?.available).toBe(false);
+      expect(res.taxId?.message).toBe('NIF/CIF ya registrado');
+    });
   });
 });

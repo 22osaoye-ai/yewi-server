@@ -67,6 +67,14 @@ export class RegisterDto {
 
   // Datos opcionales si se registra directamente como profesional
   @ApiPropertyOptional({
+    example: '12345678Z',
+    description: 'NIF, NIE o CIF español del profesional',
+  })
+  @IsOptional()
+  @IsString()
+  taxId?: string;
+
+  @ApiPropertyOptional({
     example: 'Reformas y Fontanería Express',
     description: 'Nombre comercial (si es profesional)',
   })

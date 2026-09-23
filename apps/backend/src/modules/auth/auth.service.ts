@@ -16,6 +16,10 @@ import { PrismaService } from '../../database/prisma.service';
 import { RedisCacheService } from '../../common/cache/redis.service';
 import { LoginDto, RefreshTokenDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import {
+  CheckAvailabilityDto,
+  CheckAvailabilityResult,
+} from './dto/check-availability.dto';
 import { SendPhoneOtpDto, VerifyPhoneOtpDto } from './dto/phone-auth.dto';
 import { GoogleAuthDto } from './dto/google-auth.dto';
 import { JwtPayload } from './strategies/jwt.strategy';
@@ -122,8 +126,20 @@ export class AuthService {
       }
     }
 
-    const passwordHash = await argon2.hash(dto.password);
     const roles = this.normalizeRoles(dto.roles);
+    const isPro = roles.includes(UserRole.PROFESSIONAL);
+    const normalizedTaxId = dto.taxId?.trim().toUpperCase() || null;
+
+    if (isPro && normalizedTaxId) {
+      const existingTax = await this.prisma.professionalProfile.findFirst({
+        where: { taxId: normalizedTaxId },
+      });
+      if (existingTax) {
+        throw new ConflictException('El NIF/CIF ya está registrado en otra cuenta profesional.');
+      }
+    }
+
+    const passwordHash = await argon2.hash(dto.password);
 
     try {
       const user = await this.prisma.$transaction(async (tx) => {
@@ -159,6 +175,7 @@ export class AuthService {
               userId: newUser.id,
               businessName:
                 dto.businessName ?? `${dto.firstName} ${dto.lastName}`.trim(),
+              taxId: normalizedTaxId,
               bio: dto.bio ?? '',
               latitude: dto.latitude ?? null,
               longitude: dto.longitude ?? null,
@@ -688,6 +705,74 @@ export class AuthService {
       data: { refreshTokenHash: null },
     });
     return { message: 'Sesión cerrada correctamente' };
+  }
+
+  /**
+   * 8. Comprobar en tiempo real la disponibilidad de email, teléfono y NIE/CIF
+   */
+  async checkAvailability(dto: CheckAvailabilityDto): Promise<CheckAvailabilityResult> {
+    const result: CheckAvailabilityResult = {};
+
+    // 1. Comprobación de email
+    if (dto.email && dto.email.trim()) {
+      const normalizedEmail = dto.email.trim().toLowerCase();
+      const existingUser = await this.prisma.user.findFirst({
+        where: {
+          email: { equals: normalizedEmail, mode: 'insensitive' },
+        },
+      });
+
+      result.email = existingUser
+        ? { available: false, message: 'Correo ya registrado' }
+        : { available: true, message: 'Disponible' };
+    }
+
+    // 2. Comprobación de teléfono
+    if (dto.phoneNumber && dto.phoneNumber.trim()) {
+      try {
+        const { phoneNumber: cleanPhone } = this.validateCountryAndPhone(
+          dto.country,
+          dto.phoneNumber,
+        );
+
+        if (cleanPhone) {
+          const existingPhone = await this.prisma.profile.findFirst({
+            where: { phoneNumber: cleanPhone },
+          });
+
+          result.phoneNumber = existingPhone
+            ? {
+                available: false,
+                message: 'Teléfono ya registrado',
+                formatted: cleanPhone,
+              }
+            : {
+                available: true,
+                message: 'Disponible',
+                formatted: cleanPhone,
+              };
+        }
+      } catch (err: any) {
+        result.phoneNumber = {
+          available: false,
+          message: err?.message || 'Formato de teléfono no válido',
+        };
+      }
+    }
+
+    // 3. Comprobación de taxId (NIF/NIE/CIF de profesional)
+    if (dto.taxId && dto.taxId.trim()) {
+      const normalizedTaxId = dto.taxId.trim().toUpperCase();
+      const existingTax = await this.prisma.professionalProfile.findFirst({
+        where: { taxId: normalizedTaxId },
+      });
+
+      result.taxId = existingTax
+        ? { available: false, message: 'NIF/CIF ya registrado' }
+        : { available: true, message: 'Disponible' };
+    }
+
+    return result;
   }
 
   /**

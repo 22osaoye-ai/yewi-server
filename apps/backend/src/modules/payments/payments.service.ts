@@ -1,15 +1,18 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   ServiceUnavailableException,
   Optional,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { PrismaService } from '../../database/prisma.service';
 import { CreatePaymentIntentDto } from './dto/create-payment-intent.dto';
 import { RealtimeService } from '../../common/realtime/realtime.service';
+import { OrdersService } from '../orders/orders.service';
 
 @Injectable()
 export class PaymentsService {
@@ -20,6 +23,9 @@ export class PaymentsService {
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
     @Optional() private readonly realtime?: RealtimeService,
+    @Optional()
+    @Inject(forwardRef(() => OrdersService))
+    private readonly ordersService?: OrdersService,
   ) {
     const apiKey = this.configService.get<string>('STRIPE_SECRET_KEY');
     if (apiKey && !apiKey.includes('placeholder')) {
@@ -737,8 +743,28 @@ export class PaymentsService {
 
           if (paymentType === 'GIG_ORDER_CHECKOUT') {
             this.logger.log(
-              `Stripe Checkout completado exitosamente para Gig Order (Session: ${session.id}, User: ${userId})`,
+              `Stripe Checkout completado para Gig Order (Session: ${session.id}, User: ${userId}). Materializando orden en Escrow...`,
             );
+            if (this.ordersService && userId) {
+              try {
+                await this.ordersService.confirmGigCheckoutSession(
+                  userId,
+                  session.id,
+                );
+                this.logger.log(
+                  `Orden y fondos retenidos en Escrow materializados exitosamente desde webhook para sesión: ${session.id}`,
+                );
+              } catch (confirmErr: any) {
+                this.logger.error(
+                  `Error al materializar orden desde webhook (Session: ${session.id}): ${confirmErr.message}`,
+                  confirmErr.stack,
+                );
+              }
+            } else {
+              this.logger.warn(
+                `OrdersService o userId no disponible para materializar la orden (Session: ${session.id}, userId: ${userId})`,
+              );
+            }
           } else if (userId && session.subscription) {
             const subscriptionId =
               typeof session.subscription === 'string'
