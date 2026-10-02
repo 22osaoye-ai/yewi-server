@@ -117,7 +117,7 @@ export class PaymentsService {
   }
 
   /**
-   * Obtener o crear ID de precio para Yewi Pro (9.99 EUR/mes)
+   * Obtener o crear ID de precio para Yewi Pro (15.99 EUR/mes)
    */
   private async getOrCreateProPriceId(): Promise<string> {
     if (!this.stripe) {
@@ -152,10 +152,10 @@ export class PaymentsService {
         return prices.data[0].id;
       }
 
-      // Si el producto no tiene precio recurrente activo, crearlo (9.99 EUR / mes)
+      // Si el producto no tiene precio recurrente activo, crearlo (15.99 EUR / mes)
       const newPrice = await this.stripe.prices.create({
         product: configuredPriceOrProduct,
-        unit_amount: 999, // 9.99 EUR en céntimos
+        unit_amount: 1599, // 15.99 EUR en céntimos
         currency: 'eur',
         recurring: { interval: 'month' },
       });
@@ -172,7 +172,7 @@ export class PaymentsService {
       const product = await this.stripe.products.create({
         name: 'Yewi Pro',
         description:
-          'Suscripción profesional Yewi Pro: solicitudes prioritarias, contacto directo, cobertura nacional y top en directorio.',
+          'Suscripción profesional Yewi Pro: herramientas avanzadas con IA (presupuestos y benchmarking de precios de mercado), solicitudes prioritarias, contacto directo sin comisiones y cobertura nacional.',
       });
       productId = product.id;
     }
@@ -190,7 +190,7 @@ export class PaymentsService {
 
     const createdPrice = await this.stripe.prices.create({
       product: productId,
-      unit_amount: 999,
+      unit_amount: 1599, // 15.99 EUR en céntimos
       currency: 'eur',
       recurring: { interval: 'month' },
     });
@@ -199,7 +199,7 @@ export class PaymentsService {
   }
 
   /**
-   * Crear sesión de Stripe Checkout para suscripción Yewi Pro (9,99 €/mes)
+   * Crear sesión de Stripe Checkout para suscripción Yewi Pro (15,99 €/mes)
    */
   async createSubscriptionCheckout(
     userId: string,
@@ -541,10 +541,13 @@ export class PaymentsService {
             `Suscripción Stripe sincronizada exitosamente como activa para usuario ${userId} (${activeSub.id})`,
           );
 
+          const itemAmount = (activeSub as any).items?.data?.[0]?.price?.unit_amount;
+          const dynamicPriceEur = typeof itemAmount === 'number' ? itemAmount / 100 : 15.99;
+
           return {
             isPro: true,
             plan: 'Yewi Pro',
-            priceEur: 9.99,
+            priceEur: dynamicPriceEur,
             interval: 'month',
             paymentMethod,
             subscription: updatedSub,
@@ -579,7 +582,7 @@ export class PaymentsService {
     return {
       isPro,
       plan: 'Yewi Pro',
-      priceEur: 9.99,
+      priceEur: 15.99,
       interval: 'month',
       paymentMethod: null,
       subscription: user?.subscription ?? null,

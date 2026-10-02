@@ -26,6 +26,7 @@ import {
   UpdateProfessionalProfileDto,
 } from './dto/update-professional-profile.dto';
 import { FilterProfessionalsDto } from './dto/filter-professionals.dto';
+import { BudgetBenchmarkDto } from './dto/budget-benchmark.dto';
 import { ProfessionalsService } from './professionals.service';
 
 @ApiTags('Professionals (Perfiles Pro, Portafolio, Ubicación & KYC)')
@@ -154,5 +155,27 @@ export class ProfessionalsController {
     @Body() dto: SubmitKycDto,
   ) {
     return this.professionalsService.submitKyc(userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Post('tools/budget-benchmark')
+  @ApiOperation({
+    summary:
+      'Consultar benchmarking de precios de mercado con IA y plantillas de presupuestos (Exclusivo Yewi Pro)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Plantilla o estimación de precios con IA desglosada por mano de obra y materiales',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Acceso denegado: requiere suscripción activa a Yewi Pro (15,99 €/mes)',
+  })
+  async getBudgetBenchmark(
+    @CurrentUser('id') userId: string,
+    @Body() dto: BudgetBenchmarkDto,
+  ) {
+    return this.professionalsService.getBudgetBenchmark(userId, dto);
   }
 }

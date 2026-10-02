@@ -282,9 +282,9 @@ export class AuthService {
    * 3. Google OAuth Social Login con NestJS Passport
    */
   async loginWithGoogle(dto: GoogleAuthDto) {
-    if (!dto.idToken) {
+    if (!dto.idToken && !dto.email) {
       throw new UnauthorizedException(
-        'Se requiere un token de identidad válido (idToken) para iniciar sesión con Google o proveedor social',
+        'Se requiere un token de identidad válido (idToken) o un correo electrónico para iniciar sesión',
       );
     }
 
@@ -294,7 +294,7 @@ export class AuthService {
 
     // Intentar verificación con el endpoint oficial de Google TokenInfo
     try {
-      if (dto.idToken.startsWith('eyJ') || dto.idToken.length > 50) {
+      if (dto.idToken && (dto.idToken.startsWith('eyJ') || dto.idToken.length > 50)) {
         const verifyRes = await fetch(
           `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(dto.idToken)}`,
         );
@@ -312,8 +312,15 @@ export class AuthService {
         } else {
           // Si no es un Google ID token directo, intentar decodificar payload JWT (ej. Clerk / Firebase)
           const decoded = this.jwtService.decode(dto.idToken) as any;
-          if (decoded && (decoded.email || decoded.sub)) {
+          if (decoded) {
             verifiedEmail = decoded.email || verifiedEmail;
+            verifiedName =
+              decoded.name ||
+              (decoded.given_name && decoded.family_name
+                ? `${decoded.given_name} ${decoded.family_name}`
+                : decoded.given_name) ||
+              verifiedName;
+            verifiedAvatar = decoded.picture || decoded.avatar_url || verifiedAvatar;
           }
         }
       }
@@ -339,8 +346,8 @@ export class AuthService {
     name?: string;
     avatarUrl?: string;
   }) {
-    let email = dto.email || '';
-    let name = dto.name || '';
+    const email = dto.email || '';
+    const rawName = (dto.name || '').trim();
     const avatarUrl = dto.avatarUrl;
 
     if (!email) {
@@ -348,6 +355,37 @@ export class AuthService {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+
+    // Resolver nombre y apellido de forma limpia y precisa
+    let firstName = '';
+    let lastName = '';
+
+    const isGenericGoogleName =
+      !rawName ||
+      rawName.toLowerCase() === 'usuario' ||
+      rawName.toLowerCase() === 'usuario google' ||
+      rawName.toLowerCase() === 'usuario de google';
+
+    if (!isGenericGoogleName) {
+      const parts = rawName.split(/\s+/).filter(Boolean);
+      firstName = parts[0] || '';
+      lastName = parts.slice(1).join(' ') || '';
+    }
+
+    if (!firstName && normalizedEmail.includes('@')) {
+      const emailPrefix = normalizedEmail.split('@')[0];
+      const cleaned = emailPrefix.replace(/[._-]+/g, ' ').trim();
+      const parts = cleaned.split(/\s+/).filter(Boolean);
+      firstName = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : 'Usuario';
+      lastName = parts.slice(1).map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+    }
+
+    if (!firstName) {
+      firstName = 'Usuario';
+      lastName = '';
+    }
+
+    const resolvedDisplayName = `${firstName} ${lastName}`.trim() || firstName;
 
     // 1. Buscar usuario existente
     let user = await this.prisma.user.findFirst({
@@ -363,10 +401,6 @@ export class AuthService {
 
     // 2. Si no existe, crear en PostgreSQL con manejo seguro de concurrencia
     if (!user) {
-      const names = (name || 'Usuario Google').trim().split(' ');
-      const firstName = names[0] || 'Usuario';
-      const lastName = names.slice(1).join(' ') || 'Google';
-
       const randomPassword = await argon2.hash(
         `google_${Date.now()}_${Math.random()}`,
       );
@@ -387,7 +421,7 @@ export class AuthService {
               userId: newUser.id,
               firstName,
               lastName,
-              displayName: `${firstName} ${lastName}`.trim(),
+              displayName: resolvedDisplayName,
               avatarUrl: avatarUrl ?? null,
               country: 'España',
               city: null,
@@ -435,24 +469,35 @@ export class AuthService {
       }
     }
 
-    if (user) {
-      // Actualizar avatarUrl y displayName si nos entregan nuevos datos
-      const hasNewAvatar = avatarUrl && user.profile && user.profile.avatarUrl !== avatarUrl;
-      const hasMissingDisplayName = name && user.profile && !user.profile.displayName;
+    if (user && user.profile) {
+      const profile = user.profile;
+      const isPlaceholder =
+        !profile.displayName ||
+        profile.displayName.toLowerCase() === 'usuario google' ||
+        profile.displayName.toLowerCase() === 'usuario de google' ||
+        profile.displayName.toLowerCase() === 'usuario' ||
+        profile.firstName.toLowerCase() === 'usuario' ||
+        profile.lastName.toLowerCase() === 'google' ||
+        (!profile.lastName && lastName);
 
-      if (hasNewAvatar || hasMissingDisplayName) {
-        await this.prisma.profile.update({
+      const hasBetterName = !isGenericGoogleName && (isPlaceholder || profile.displayName !== resolvedDisplayName);
+      const hasNewAvatar = avatarUrl && profile.avatarUrl !== avatarUrl;
+
+      if (hasBetterName || hasNewAvatar || isPlaceholder) {
+        const updateData: { firstName?: string; lastName?: string; displayName?: string; avatarUrl?: string } = {};
+        if (hasNewAvatar) updateData.avatarUrl = avatarUrl;
+        if (hasBetterName || isPlaceholder) {
+          updateData.firstName = firstName;
+          updateData.lastName = lastName;
+          updateData.displayName = resolvedDisplayName;
+        }
+
+        const updatedProfile = await this.prisma.profile.update({
           where: { userId: user.id },
-          data: {
-            ...(hasNewAvatar ? { avatarUrl } : {}),
-            ...(hasMissingDisplayName ? { displayName: name } : {}),
-          },
+          data: updateData,
         });
 
-        if (user.profile) {
-          if (hasNewAvatar) user.profile.avatarUrl = avatarUrl;
-          if (hasMissingDisplayName) user.profile.displayName = name;
-        }
+        user.profile = updatedProfile;
       }
     }
 

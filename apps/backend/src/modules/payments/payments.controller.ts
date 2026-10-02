@@ -94,7 +94,7 @@ export class PaymentsController {
   @Post('subscription/checkout')
   @ApiOperation({
     summary:
-      'Crear sesión de Stripe Checkout para suscripción mensual Yewi Pro (9,99 €/mes)',
+      'Crear sesión de Stripe Checkout para suscripción mensual Yewi Pro (15,99 €/mes)',
   })
   async createSubscriptionCheckout(@CurrentUser('id') userId: string) {
     return this.paymentsService.createSubscriptionCheckout(userId);

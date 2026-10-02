@@ -1,4 +1,5 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+
 import { ProfessionalsService } from './professionals.service';
 
 describe('ProfessionalsService', () => {
@@ -159,4 +160,79 @@ describe('ProfessionalsService', () => {
       }),
     );
   });
+
+  describe('getBudgetBenchmark', () => {
+    it('throws NotFoundException if user does not exist', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(
+        service.getBudgetBenchmark('non-existent', {}),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('throws ForbiddenException if user is not Pro and has no active subscription', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        isPro: false,
+        subscription: null,
+        profile: { province: 'Madrid' },
+      });
+
+      await expect(
+        service.getBudgetBenchmark('user-1', { itemTitle: 'Pintura' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('returns calibrated item benchmark when itemTitle is provided and user is Pro', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-pro',
+        isPro: true,
+        subscription: null,
+        profile: { province: 'Madrid' },
+      });
+
+      const result = await service.getBudgetBenchmark('user-pro', {
+        itemTitle: 'Pintura plástica lisa',
+        quantity: 50,
+      });
+
+      expect(result).toHaveProperty('itemTitle', 'Pintura plástica lisa');
+      expect(result).toHaveProperty('averagePrice');
+      expect(result).toHaveProperty('laborCost');
+      expect(result).toHaveProperty('materialCost');
+      expect(result.province).toBe('Madrid');
+      expect(result.provinceFactor).toBe(1.12);
+    });
+
+    it('returns calibrated template when templateKey is provided', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-pro',
+        isPro: true,
+        subscription: null,
+        profile: { province: 'Zaragoza' },
+      });
+
+      const result = await service.getBudgetBenchmark('user-pro', {
+        templateKey: 'reforma_bano',
+      });
+
+      expect(result).toHaveProperty('template');
+      expect(result.template.key).toBe('reforma_bano');
+      expect(result.template.items.length).toBeGreaterThan(0);
+      expect(result.availableTemplates).toBeDefined();
+    });
+
+    it('returns catalog of available templates when no item or template is specified', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-pro',
+        isPro: true,
+        subscription: null,
+        profile: null,
+      });
+
+      const result = await service.getBudgetBenchmark('user-pro', {});
+      expect(result.availableTemplates).toBeDefined();
+      expect(result.province).toBe('Zaragoza');
+    });
+  });
 });
+
