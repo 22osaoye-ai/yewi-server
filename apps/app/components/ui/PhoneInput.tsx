@@ -5,8 +5,8 @@ import {
   TextInput,
   Modal,
   Pressable,
-  ScrollView,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -29,6 +29,9 @@ interface PhoneInputProps {
   onChangePhone: (nationalNumber: string, result: PhoneValidationResult) => void;
   error?: string;
   hint?: string;
+  status?: 'idle' | 'checking' | 'valid' | 'invalid';
+  validMessage?: string;
+  rightComponent?: React.ReactNode;
   autoFocus?: boolean;
   disabled?: boolean;
 }
@@ -41,6 +44,9 @@ export function PhoneInput({
   onChangePhone,
   error,
   hint,
+  status = 'idle',
+  validMessage,
+  rightComponent,
   autoFocus = false,
   disabled = false,
 }: PhoneInputProps) {
@@ -56,7 +62,6 @@ export function PhoneInput({
     if (onCountryChange) {
       onCountryChange(c);
     }
-    // Re-validate with new country
     const result = validatePhoneNumber(c.code, c.prefix, value);
     onChangePhone(value, result);
   };
@@ -72,36 +77,46 @@ export function PhoneInput({
 
   return (
     <View className="mb-4">
-      {/* Direct Clean Label */}
-      <Text
-        style={{
-          fontSize: 13,
-          fontFamily: 'Satoshi-Bold',
-          color: colors.textPrimary,
-          marginBottom: 6,
-          marginLeft: 2,
-        }}
-      >
-        {label}
-      </Text>
+      {/* Label */}
+      {label && (
+        <Text
+          numberOfLines={1}
+          style={{
+            fontSize: 13,
+            fontFamily: 'PlusJakartaSans-Bold',
+            color: colors.textPrimary,
+            marginBottom: 6,
+            marginLeft: 2,
+          }}
+        >
+          {label}
+        </Text>
+      )}
 
-      {/* Input Group with Prefix Picker */}
+      {/* Input Group with Country Prefix */}
       <View
         style={{
           flexDirection: 'row',
           alignItems: 'center',
-          backgroundColor: isDark ? '#1C1C1E' : '#F4F4F5',
+          backgroundColor: isDark ? '#1C1C1E' : '#F8FAFC',
           borderWidth: 1.5,
-          borderColor: error
+          borderColor: error || status === 'invalid'
             ? '#EF4444'
+            : status === 'valid'
+            ? '#10B981'
             : isFocused
             ? colors.primary
             : isDark
             ? '#2E2E34'
-            : '#E4E4E7',
-          borderRadius: 14,
+            : '#E2E8F0',
+          borderRadius: 16,
           overflow: 'hidden',
           minHeight: 52,
+          shadowColor: isFocused ? colors.primary : 'transparent',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: isFocused ? 0.15 : 0,
+          shadowRadius: 8,
+          elevation: isFocused ? 2 : 0,
         }}
       >
         {/* Country Selector Button */}
@@ -113,15 +128,16 @@ export function PhoneInput({
             paddingHorizontal: 12,
             paddingVertical: 14,
             borderRightWidth: 1,
-            borderRightColor: isDark ? '#2E2E34' : '#E4E4E7',
-            backgroundColor: isDark ? '#242428' : '#ECECEE',
+            borderRightColor: isDark ? '#2E2E34' : '#E2E8F0',
+            backgroundColor: isDark ? '#242428' : '#F1F5F9',
           }}
         >
           <Text style={{ fontSize: 18, marginRight: 6 }}>{country.flag}</Text>
           <Text
+            numberOfLines={1}
             style={{
-              fontSize: 14.5,
-              fontFamily: 'Satoshi-Bold',
+              fontSize: 14,
+              fontFamily: 'PlusJakartaSans-Bold',
               color: colors.textPrimary,
               marginRight: 4,
             }}
@@ -130,7 +146,7 @@ export function PhoneInput({
           </Text>
           <Ionicons
             name="chevron-down"
-            size={14}
+            size={13}
             color={colors.textSecondary}
           />
         </Pressable>
@@ -140,7 +156,7 @@ export function PhoneInput({
           value={formattedValue}
           onChangeText={handleTextChange}
           placeholder={country.placeholder}
-          placeholderTextColor={isDark ? '#71717A' : '#A1A1AA'}
+          placeholderTextColor={isDark ? '#71717A' : '#94A3B8'}
           keyboardType="phone-pad"
           autoFocus={autoFocus}
           editable={!disabled}
@@ -150,8 +166,8 @@ export function PhoneInput({
             flex: 1,
             paddingHorizontal: 14,
             paddingVertical: 12,
-            fontSize: 16,
-            fontFamily: 'Satoshi-Medium',
+            fontSize: 15,
+            fontFamily: 'PlusJakartaSans-Medium',
             color: colors.textPrimary,
           }}
         />
@@ -159,7 +175,8 @@ export function PhoneInput({
         {value.length > 0 && !disabled && (
           <Pressable
             onPress={() => handleTextChange('')}
-            style={{ paddingHorizontal: 12 }}
+            hitSlop={8}
+            style={{ paddingHorizontal: 10 }}
           >
             <Ionicons
               name="close-circle"
@@ -168,16 +185,39 @@ export function PhoneInput({
             />
           </Pressable>
         )}
+
+        {/* Status Indicator Icon */}
+        {!rightComponent && status === 'checking' && (
+          <View style={{ paddingHorizontal: 10 }}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        )}
+        {!rightComponent && status === 'valid' && (
+          <View style={{ paddingHorizontal: 10 }}>
+            <Ionicons name="checkmark-circle" size={19} color="#10B981" />
+          </View>
+        )}
+        {!rightComponent && status === 'invalid' && !error && (
+          <View style={{ paddingHorizontal: 10 }}>
+            <Ionicons name="alert-circle" size={19} color="#EF4444" />
+          </View>
+        )}
+        {rightComponent && (
+          <View style={{ paddingHorizontal: 8 }}>
+            {rightComponent}
+          </View>
+        )}
       </View>
 
-      {/* Error or Hint feedback */}
+      {/* Error, Valid Message, Checking or Hint feedback */}
       {error ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5, marginLeft: 2 }}>
           <Ionicons name="alert-circle" size={14} color="#EF4444" style={{ marginRight: 4 }} />
           <Text
+            numberOfLines={1}
             style={{
               fontSize: 12,
-              fontFamily: 'Satoshi-Medium',
+              fontFamily: 'PlusJakartaSans-Medium',
               color: '#EF4444',
               flex: 1,
             }}
@@ -185,11 +225,40 @@ export function PhoneInput({
             {error}
           </Text>
         </View>
-      ) : hint ? (
+      ) : status === 'valid' && validMessage ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5, marginLeft: 2 }}>
+          <Ionicons name="checkmark-circle" size={14} color="#10B981" style={{ marginRight: 4 }} />
+          <Text
+            numberOfLines={1}
+            style={{
+              fontSize: 12,
+              fontFamily: 'PlusJakartaSans-Medium',
+              color: '#10B981',
+              flex: 1,
+            }}
+          >
+            {validMessage}
+          </Text>
+        </View>
+      ) : status === 'checking' ? (
         <Text
+          numberOfLines={1}
           style={{
             fontSize: 12,
-            fontFamily: 'Satoshi-Regular',
+            fontFamily: 'PlusJakartaSans-Regular',
+            color: colors.primary,
+            marginTop: 4,
+            marginLeft: 2,
+          }}
+        >
+          Comprobando...
+        </Text>
+      ) : hint ? (
+        <Text
+          numberOfLines={1}
+          style={{
+            fontSize: 12,
+            fontFamily: 'PlusJakartaSans-Regular',
             color: colors.textSecondary,
             marginTop: 4,
             marginLeft: 2,
@@ -213,34 +282,27 @@ export function PhoneInput({
           <View
             style={[
               styles.modalCard,
-              { backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF', borderColor: isDark ? '#2E2E34' : '#E4E4E7' },
+              {
+                backgroundColor: isDark ? '#1C1C1E' : '#FFFFFF',
+                borderColor: isDark ? '#2E2E34' : '#E2E8F0',
+              },
             ]}
           >
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <Text
+                numberOfLines={1}
                 style={{
                   fontSize: 16,
-                  fontFamily: 'Satoshi-Bold',
+                  fontFamily: 'PlusJakartaSans-Bold',
                   color: colors.textPrimary,
                 }}
               >
-                Seleccionar País & Prefijo
+                País
               </Text>
-              <Pressable onPress={() => setModalVisible(false)}>
+              <Pressable onPress={() => setModalVisible(false)} hitSlop={8}>
                 <Ionicons name="close" size={20} color={colors.textSecondary} />
               </Pressable>
             </View>
-
-            <Text
-              style={{
-                fontSize: 12.5,
-                fontFamily: 'Satoshi-Regular',
-                color: colors.textSecondary,
-                marginBottom: 12,
-              }}
-            >
-              Países autorizados en esta fase de Yewi:
-            </Text>
 
             {SUPPORTED_COUNTRIES.map((c) => {
               const isSelected = c.code === country.code;
@@ -255,31 +317,33 @@ export function PhoneInput({
                     justifyContent: 'space-between',
                     paddingVertical: 12,
                     paddingHorizontal: 14,
-                    borderRadius: 12,
+                    borderRadius: 14,
                     backgroundColor: isSelected
                       ? isDark
                         ? '#2E2E34'
-                        : '#F1F5F9'
+                        : '#F0F9FF'
                       : 'transparent',
                     marginBottom: 6,
                   }}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
                     <Text style={{ fontSize: 22, marginRight: 12 }}>{c.flag}</Text>
-                    <View>
+                    <View style={{ flex: 1 }}>
                       <Text
+                        numberOfLines={1}
                         style={{
-                          fontSize: 15,
-                          fontFamily: 'Satoshi-Bold',
+                          fontSize: 14,
+                          fontFamily: 'PlusJakartaSans-Bold',
                           color: colors.textPrimary,
                         }}
                       >
                         {c.name}
                       </Text>
                       <Text
+                        numberOfLines={1}
                         style={{
-                          fontSize: 12,
-                          fontFamily: 'Satoshi-Regular',
+                          fontSize: 11.5,
+                          fontFamily: 'PlusJakartaSans-Regular',
                           color: colors.textSecondary,
                         }}
                       >
@@ -290,11 +354,12 @@ export function PhoneInput({
 
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Text
+                      numberOfLines={1}
                       style={{
-                        fontSize: 14.5,
-                        fontFamily: 'Satoshi-Black',
+                        fontSize: 14,
+                        fontFamily: 'PlusJakartaSans-ExtraBold',
                         color: colors.primary,
-                        marginRight: 8,
+                        marginRight: 6,
                       }}
                     >
                       {c.prefix}
@@ -324,13 +389,13 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 380,
-    borderRadius: 20,
+    borderRadius: 24,
     padding: 20,
     borderWidth: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 10,
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 8,
   },
 });

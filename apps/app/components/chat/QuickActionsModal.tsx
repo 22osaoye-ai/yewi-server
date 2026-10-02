@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, Modal, Pressable } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { View, Text, StyleSheet } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ThemedTouchable } from '@/components/ui/ThemedTouchable';
+import { AppBottomSheet } from '@/components/ui/AppBottomSheet';
 import { useAppTheme } from '@/hooks/useAppTheme';
 
 interface QuickActionsModalProps {
@@ -43,145 +44,78 @@ export function QuickActionsModal({
   onClose,
   onSelectAction,
 }: QuickActionsModalProps) {
-  const { colors, isDark } = useAppTheme();
-
-  if (!visible) return null;
+  const { isDark } = useAppTheme();
 
   return (
-    <Modal
+    <AppBottomSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
+      onClose={onClose}
+      title="Acciones rápidas"
     >
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable
-          style={[
-            styles.sheetContainer,
-            {
-              backgroundColor: isDark ? '#161922' : '#FFFFFF',
-              borderColor: isDark ? '#2D3548' : '#E2E8F0',
-            },
-          ]}
-          onPress={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <View style={[styles.lightningIconWrap, { backgroundColor: colors.primaryLight }]}>
-                <Ionicons name="flash" size={16} color={colors.primary} />
-              </View>
-              <Text style={[styles.title, { color: colors.textPrimary }]}>
-                Acciones Rápidas Yewi
+      <View style={styles.actionsList}>
+        {QUICK_ACTIONS.map((action, idx) => (
+          <ThemedTouchable
+            key={idx}
+            onPress={() => {
+              onClose();
+              setTimeout(() => {
+                onSelectAction(action.text);
+              }, 180);
+            }}
+            haptic="selection"
+            style={styles.actionItem}
+            accessibilityRole="button"
+            accessibilityLabel={action.title}
+          >
+            <MaterialCommunityIcons
+              name={action.icon as any}
+              size={24}
+              color={isDark ? '#F9FAFB' : '#111827'}
+              style={styles.actionIcon}
+            />
+
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.actionTitle, { color: isDark ? '#F9FAFB' : '#111827' }]}>
+                {action.title}
+              </Text>
+              <Text style={[styles.actionDesc, { color: isDark ? '#9CA3AF' : '#6B7280' }]}>
+                {action.description}
               </Text>
             </View>
-
-            <ThemedTouchable onPress={onClose} haptic="light">
-              <Ionicons name="close" size={22} color={colors.textSecondary} />
-            </ThemedTouchable>
-          </View>
-
-          {/* Action List */}
-          <View style={styles.actionsList}>
-            {QUICK_ACTIONS.map((action, idx) => (
-              <ThemedTouchable
-                key={idx}
-                onPress={() => {
-                  onSelectAction(action.text);
-                  onClose();
-                }}
-                haptic="medium"
-                style={[
-                  styles.actionItem,
-                  {
-                    backgroundColor: isDark ? '#1F2432' : '#F8FAFC',
-                    borderColor: isDark ? '#2B3245' : '#E2E8F0',
-                  },
-                ]}
-              >
-                <View style={[styles.actionIconBadge, { backgroundColor: isDark ? '#272E3F' : '#EFF6FF' }]}>
-                  <MaterialCommunityIcons
-                    name={action.icon as any}
-                    size={20}
-                    color={colors.primary}
-                  />
-                </View>
-
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.actionTitle, { color: colors.textPrimary }]}>
-                    {action.title}
-                  </Text>
-                  <Text style={[styles.actionDesc, { color: colors.textSecondary }]}>
-                    {action.description}
-                  </Text>
-                </View>
-
-                <Ionicons name="arrow-forward" size={16} color={colors.textMuted} />
-              </ThemedTouchable>
-            ))}
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+          </ThemedTouchable>
+        ))}
+      </View>
+    </AppBottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  sheetContainer: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 1,
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 36,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  lightningIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 16,
-    fontFamily: 'Satoshi-Bold',
-  },
   actionsList: {
-    gap: 10,
+    gap: 6,
+    paddingTop: 4,
   },
   actionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
   },
-  actionIconBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
+  actionIcon: {
+    marginRight: 16,
+    width: 26,
+    textAlign: 'center',
   },
   actionTitle: {
-    fontSize: 14,
-    fontFamily: 'Satoshi-Bold',
+    fontSize: 15.5,
+    fontFamily: 'PlusJakartaSans-Bold',
+    letterSpacing: -0.2,
+    marginBottom: 2,
   },
   actionDesc: {
-    fontSize: 12,
-    fontFamily: 'Satoshi-Regular',
-    marginTop: 2,
+    fontSize: 12.5,
+    fontFamily: 'PlusJakartaSans-Medium',
+    lineHeight: 16,
   },
 });
+
+export default QuickActionsModal;

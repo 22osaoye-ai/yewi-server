@@ -35,7 +35,7 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
           <Text
             style={{
               fontSize: 12.5,
-              fontFamily: rule.valid ? 'Satoshi-Bold' : 'Satoshi-Regular',
+              fontFamily: rule.valid ? 'PlusJakartaSans-Bold' : 'PlusJakartaSans-Regular',
               color: rule.valid ? '#10B981' : colors.textSecondary,
             }}
           >

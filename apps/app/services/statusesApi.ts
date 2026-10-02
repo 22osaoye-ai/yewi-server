@@ -47,8 +47,12 @@ export interface CreateStatusPayload {
 
 export const statusesApi = {
   // 1. Obtener feed de estados agrupados por autor
-  async getFeed(): Promise<AuthorStatusFeedGroup[]> {
-    return apiRequest<AuthorStatusFeedGroup[]>('/statuses/feed', {
+  async getFeed(followedIds?: string[]): Promise<AuthorStatusFeedGroup[]> {
+    const query =
+      followedIds && followedIds.length > 0
+        ? `?followedIds=${encodeURIComponent(followedIds.join(','))}`
+        : '';
+    return apiRequest<AuthorStatusFeedGroup[]>(`/statuses/feed${query}`, {
       method: 'GET',
     });
   },

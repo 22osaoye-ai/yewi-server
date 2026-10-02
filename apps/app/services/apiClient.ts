@@ -12,7 +12,7 @@ export const getDevCandidates = (): string[] => {
     (Constants as any).manifest2?.extra?.expoGo?.debuggerHost ||
     (Constants as any).manifest?.debuggerHost;
 
-  const lanHost = hostUri ? hostUri.split(':')[0] : '192.168.1.17';
+  const lanHost = hostUri ? hostUri.split(':')[0] : '192.168.1.23';
   const lanUrl = `http://${lanHost}:3000/api/v1`;
 
   if (Platform.OS === 'android') {
@@ -112,10 +112,101 @@ export async function clearTokens(): Promise<void> {
   } catch {}
 }
 
+let refreshPromise: Promise<string | null> | null = null;
+
+type AuthFailureCallback = () => void;
+let authFailureCallback: AuthFailureCallback | null = null;
+
+export function registerAuthFailureHandler(callback: AuthFailureCallback): void {
+  authFailureCallback = callback;
+}
+
+function notifyAuthFailure(): void {
+  if (authFailureCallback) {
+    try {
+      authFailureCallback();
+    } catch {}
+  }
+}
+
+export async function requestTokenRefresh(): Promise<string | null> {
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+
+  refreshPromise = (async () => {
+    try {
+      const refreshToken = await getRefreshToken();
+      if (!refreshToken) {
+        await clearTokens();
+        notifyAuthFailure();
+        return null;
+      }
+
+      const activeBase = getActiveApiBaseUrl();
+      const refreshResponse = await fetch(`${activeBase}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (refreshResponse.ok) {
+        const refreshPayload = await refreshResponse.json();
+        const refreshData =
+          refreshPayload &&
+          typeof refreshPayload === 'object' &&
+          'data' in refreshPayload
+            ? refreshPayload.data
+            : refreshPayload;
+
+        if (refreshData?.accessToken) {
+          await setAccessToken(refreshData.accessToken);
+          if (refreshData.refreshToken) {
+            await setRefreshToken(refreshData.refreshToken);
+          }
+          return refreshData.accessToken as string;
+        }
+      }
+
+      await clearTokens();
+      notifyAuthFailure();
+      return null;
+    } catch {
+      await clearTokens();
+      notifyAuthFailure();
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
+
+export function warmUpBackend(): void {
+  try {
+    const base = getActiveApiBaseUrl();
+    if (typeof AbortController !== 'undefined') {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      fetch(`${base}/health`, { method: 'GET', signal: controller.signal })
+        .catch(() => {})
+        .finally(() => clearTimeout(timeoutId));
+    } else {
+      fetch(`${base}/health`, { method: 'GET' }).catch(() => {});
+    }
+  } catch {}
+}
+
+export interface ApiRequestOptions extends RequestInit {
+  timeoutMs?: number;
+  noRetry?: boolean;
+}
+
 // Universal fetch wrapper
 export async function apiRequest<T = any>(
   endpoint: string,
-  options: RequestInit = {}
+  options: ApiRequestOptions = {}
 ): Promise<T> {
   const token = await getAccessToken();
 
@@ -135,27 +226,82 @@ export async function apiRequest<T = any>(
   let response: Response | undefined;
   let lastNetworkError: any = null;
 
+  // Cloud URLs (like Render free tier) require 40s to allow cold-start boot
+  const isCloud = url.includes('onrender.com') || url.includes('https://');
+  const timeoutMs = options.timeoutMs ?? (isCloud ? 40000 : 15000);
+  let internalController: AbortController | null = null;
+  let timeoutId: any = null;
+  let signal = options.signal;
+
+  if (typeof AbortController !== 'undefined') {
+    internalController = new AbortController();
+    if (options.signal) {
+      if (options.signal.aborted) {
+        internalController.abort();
+      } else {
+        options.signal.addEventListener?.('abort', () => internalController?.abort());
+      }
+    }
+    signal = internalController.signal;
+    timeoutId = setTimeout(() => internalController?.abort(), timeoutMs);
+  }
+
   try {
     response = await fetch(url, {
       ...options,
       headers,
+      signal,
     });
   } catch (networkError: any) {
     lastNetworkError = networkError;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 
-  // Si falló por red, probar los otros candidatos (ADB reverse / Wi-Fi)
-  if (!response) {
+  const skipRetries = options.noRetry || Boolean(options.timeoutMs && options.timeoutMs < 5000);
+
+  // Si falló por cancelación/cold-start y no era una cancelación explícita del llamador, reintentar 1 vez tras 1.5s (omitido para checks rápidos)
+  if (!response && !options.signal && !skipRetries) {
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const retryController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const retryTimeoutId = retryController ? setTimeout(() => retryController.abort(), timeoutMs) : null;
+      try {
+        response = await fetch(url, {
+          ...options,
+          headers,
+          signal: retryController?.signal,
+        });
+      } finally {
+        if (retryTimeoutId) clearTimeout(retryTimeoutId);
+      }
+    } catch (retryErr: any) {
+      lastNetworkError = retryErr;
+    }
+  }
+
+  // Si falló por red o timeout, probar los otros candidatos (ADB reverse / Wi-Fi) de forma rápida (omitido para checks rápidos)
+  if (!response && !skipRetries) {
     const candidates = getDevCandidates();
     for (const candidate of candidates) {
       if (candidate === currentBase) continue;
+      let candidateTimeoutId: any = null;
       try {
         const candidateUrl = isFullUrl
           ? endpoint.replace(currentBase, candidate)
           : `${candidate}${endpoint}`;
+
+        let candidateSignal = options.signal;
+        if (!candidateSignal && typeof AbortController !== 'undefined') {
+          const cCtrl = new AbortController();
+          candidateSignal = cCtrl.signal;
+          candidateTimeoutId = setTimeout(() => cCtrl.abort(), 2500);
+        }
+
         const testRes = await fetch(candidateUrl, {
           ...options,
           headers,
+          signal: candidateSignal,
         });
         if (testRes) {
           activeApiBaseUrl = candidate;
@@ -164,54 +310,39 @@ export async function apiRequest<T = any>(
         }
       } catch (err) {
         lastNetworkError = err;
+      } finally {
+        if (candidateTimeoutId) clearTimeout(candidateTimeoutId);
       }
     }
   }
 
   if (!response) {
-    console.error(`[API Network Error] URL: ${url}`, lastNetworkError);
+    const isAbort =
+      lastNetworkError?.name === 'AbortError' ||
+      String(lastNetworkError?.message || '').includes('canceled');
+    if (!isAbort) {
+      console.warn(`[API Network Warn] URL: ${url}`, lastNetworkError?.message || lastNetworkError);
+    }
     throw new Error(
       `No se pudo conectar con el servidor backend (${url}). Verifica que el backend esté en ejecución y conectado vía Wi-Fi o USB.`
     );
   }
 
-  // Handle Token Expiry & Automatic Refresh
-  if (response.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/refresh')) {
-    const refreshToken = await getRefreshToken();
-    if (refreshToken) {
-      try {
-        const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken }),
-        });
-
-        if (refreshResponse.ok) {
-          const refreshPayload = await refreshResponse.json();
-          const refreshData =
-            refreshPayload &&
-            typeof refreshPayload === 'object' &&
-            'data' in refreshPayload
-              ? refreshPayload.data
-              : refreshPayload;
-          await setAccessToken(refreshData.accessToken);
-          await setRefreshToken(refreshData.refreshToken);
-
-          // Retry original request with new token
-          headers['Authorization'] = `Bearer ${refreshData.accessToken}`;
-          response = await fetch(url, { ...options, headers });
-        } else {
-          await clearTokens();
-        }
-      } catch {
-        await clearTokens();
-      }
+  // Handle Token Expiry & Automatic Refresh con mutex para prevenir carreras en rotación
+  if (response.status === 401 && !endpoint.startsWith('/auth/')) {
+    const newAccessToken = await requestTokenRefresh();
+    if (newAccessToken) {
+      headers['Authorization'] = `Bearer ${newAccessToken}`;
+      response = await fetch(url, { ...options, headers });
     }
   }
 
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    if (response.status === 401 && !endpoint.startsWith('/auth/')) {
+      notifyAuthFailure();
+    }
     const errorMessage = data.message || `Error ${response.status}: ${response.statusText}`;
     throw new Error(Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage);
   }

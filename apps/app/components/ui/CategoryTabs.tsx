@@ -10,6 +10,7 @@ interface CategoryTabsProps {
   onSelectCategory: (category: string) => void;
   style?: ViewStyle;
   contentContainerStyle?: ViewStyle;
+  variant?: 'solid' | 'subtle' | 'neutral';
 }
 
 export function CategoryTabs({
@@ -18,8 +19,9 @@ export function CategoryTabs({
   onSelectCategory,
   style,
   contentContainerStyle,
+  variant = 'neutral',
 }: CategoryTabsProps) {
-  const { colors, isDark } = useAppTheme();
+  const { isDark } = useAppTheme();
 
   return (
     <View style={[{ marginVertical: 6 }, style]}>
@@ -27,48 +29,60 @@ export function CategoryTabs({
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={[
-          { paddingHorizontal: 22, gap: 8 },
+          { paddingHorizontal: 20, gap: 8 },
           contentContainerStyle,
         ]}
       >
         {categories.map((cat) => {
           const isSelected = selectedCategory === cat;
+
+          // Zalando high-contrast editorial color tokens
+          const bg = isSelected
+            ? isDark
+              ? '#FFFFFF'
+              : '#09090B'
+            : isDark
+            ? '#1E293B'
+            : '#F4F4F5';
+
+          const border = isSelected
+            ? isDark
+              ? '#FFFFFF'
+              : '#09090B'
+            : isDark
+            ? 'rgba(255, 255, 255, 0.08)'
+            : '#E4E4E7';
+
+          const textColor = isSelected
+            ? isDark
+              ? '#09090B'
+              : '#FFFFFF'
+            : isDark
+            ? '#94A3B8'
+            : '#52525B';
+
           return (
             <ThemedTouchable
               key={cat}
               haptic="selection"
+              activeOpacity={0.85}
               onPress={() => onSelectCategory(cat)}
               style={{
-                backgroundColor: isSelected
-                  ? isDark
-                    ? '#F4F4F5'
-                    : '#18181B'
-                  : colors.surface,
-                paddingHorizontal: 20,
-                paddingVertical: 8,
-                borderRadius: 20,
+                backgroundColor: bg,
+                paddingHorizontal: 18,
+                paddingVertical: 9,
+                borderRadius: 999,
                 borderWidth: 1,
-                borderColor: isSelected
-                  ? isDark
-                    ? '#F4F4F5'
-                    : '#18181B'
-                  : colors.border,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: isSelected ? 0.15 : 0.03,
-                shadowRadius: 3,
-                elevation: isSelected ? 2 : 1,
+                borderColor: border,
               }}
             >
               <Text
+                numberOfLines={1}
                 style={{
-                  color: isSelected
-                    ? isDark
-                      ? '#121214'
-                      : '#FFFFFF'
-                    : colors.textPrimary,
-                  fontFamily: 'Satoshi-Bold',
+                  color: textColor,
+                  fontFamily: 'PlusJakartaSans-Bold',
                   fontSize: 13,
+                  letterSpacing: -0.2,
                 }}
               >
                 {cat}

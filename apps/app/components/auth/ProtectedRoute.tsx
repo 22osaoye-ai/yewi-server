@@ -22,7 +22,7 @@ export function ProtectedRoute({
   if (isLoading) {
     return (
       <View className="flex-1 bg-[#F8F8FA] items-center justify-center p-6">
-        <Text className="text-base font-satoshi-bold text-[#71717A]">
+        <Text className="text-base font-sans-bold text-[#71717A]">
           Cargando sesión...
         </Text>
       </View>
@@ -34,12 +34,12 @@ export function ProtectedRoute({
     return (
       <View className="flex-1 bg-[#F8F8FA] items-center justify-center px-8">
         <View className="w-20 h-20 rounded-full bg-white items-center justify-center mb-4 border border-[#E5E5EA] shadow-sm">
-          <Ionicons name="lock-closed-outline" size={36} color="#C87D20" />
+          <Ionicons name="lock-closed-outline" size={36} color="#0284C7" />
         </View>
-        <Text className="text-[20px] font-satoshi-black text-[#18181B] text-center mb-2">
+        <Text className="text-[20px] font-sans-black text-[#18181B] text-center mb-2">
           Se requiere inicio de sesión
         </Text>
-        <Text className="text-[13.5px] font-satoshi text-[#71717A] text-center mb-6 leading-5 max-w-[280px]">
+        <Text className="text-[13.5px] font-sans text-[#71717A] text-center mb-6 leading-5 max-w-[280px]">
           {fallbackMessage ||
             'Para acceder a esta sección o continuar con tu compra, por favor inicia sesión con tu cuenta de Yewi.'}
         </Text>
@@ -47,14 +47,14 @@ export function ProtectedRoute({
           onPress={() => router.push('/auth/login')}
           haptic="medium"
           style={{
-            backgroundColor: '#C87D20',
+            backgroundColor: '#0284C7',
             borderRadius: 999,
             paddingVertical: 14,
             paddingHorizontal: 28,
             alignItems: 'center',
           }}
         >
-          <Text className="text-white font-satoshi-bold text-sm">
+          <Text className="text-white font-sans-bold text-sm">
             Iniciar Sesión / Registrarse
           </Text>
         </ThemedTouchable>
@@ -69,18 +69,18 @@ export function ProtectedRoute({
         <View className="w-20 h-20 rounded-full bg-white items-center justify-center mb-4 border border-[#E5E5EA] shadow-sm">
           <Ionicons name="shield-checkmark-outline" size={36} color="#EF4444" />
         </View>
-        <Text className="text-[20px] font-satoshi-black text-[#18181B] text-center mb-2">
+        <Text className="text-[20px] font-sans-black text-[#18181B] text-center mb-2">
           Acceso Restringido
         </Text>
-        <Text className="text-[13.5px] font-satoshi text-[#71717A] text-center mb-6 leading-5 max-w-[280px]">
+        <Text className="text-[13.5px] font-sans text-[#71717A] text-center mb-6 leading-5 max-w-[280px]">
           Esta sección requiere privilegios de rol{' '}
-          <Text className="font-satoshi-bold text-[#18181B]">
+          <Text className="font-sans-bold text-[#18181B]">
             {requiredRole === 'PROFESSIONAL' ? 'Profesional / Proveedor' : requiredRole}
           </Text>
           .
         </Text>
         <ThemedTouchable
-          onPress={() => router.back()}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
           haptic="light"
           style={{
             backgroundColor: '#18181B',
@@ -89,7 +89,7 @@ export function ProtectedRoute({
             paddingHorizontal: 24,
           }}
         >
-          <Text className="text-white font-satoshi-bold text-sm">
+          <Text className="text-white font-sans-bold text-sm">
             Regresar
           </Text>
         </ThemedTouchable>

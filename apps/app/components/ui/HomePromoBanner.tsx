@@ -390,20 +390,20 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 9.5,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
     letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
   title: {
     fontSize: 18.5,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
     letterSpacing: -0.4,
     lineHeight: 22,
     marginBottom: 4,
   },
   description: {
     fontSize: 11.5,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans-Medium',
     lineHeight: 15,
     marginBottom: 9,
   },
@@ -422,7 +422,7 @@ const styles = StyleSheet.create({
   },
   ctaText: {
     fontSize: 12,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
     letterSpacing: -0.2,
   },
   rightColumn: {
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
   floatingDiscountText: {
     color: '#FFFFFF',
     fontSize: 10,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
   },
 });
 

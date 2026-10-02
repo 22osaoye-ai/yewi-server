@@ -5,11 +5,15 @@ import { useAppTheme } from '@/hooks/useAppTheme';
 
 interface SocialAuthButtonsProps {
   onGooglePress: () => void;
+  isLoading?: boolean;
+  disabled?: boolean;
   variant?: 'stacked' | 'side-by-side';
 }
 
 export function SocialAuthButtons({
   onGooglePress,
+  isLoading = false,
+  disabled = false,
   variant = 'stacked',
 }: SocialAuthButtonsProps) {
   const { colors } = useAppTheme();
@@ -23,7 +27,7 @@ export function SocialAuthButtons({
           <Text
             style={{
               fontSize: 12,
-              fontFamily: 'Satoshi-Bold',
+              fontFamily: 'PlusJakartaSans-Bold',
               color: colors.textMuted,
               marginHorizontal: 16,
             }}
@@ -34,8 +38,10 @@ export function SocialAuthButtons({
         </View>
 
         <AuthButton
-          title="Continuar con Google"
+          title={isLoading ? 'Iniciando con Google...' : 'Continuar con Google'}
           onPress={onGooglePress}
+          isLoading={isLoading}
+          disabled={disabled || isLoading}
           variant="outline"
           iconName="logo-google"
           iconColor="#EA4335"
@@ -47,8 +53,10 @@ export function SocialAuthButtons({
   return (
     <View className="w-full gap-3 mb-6">
       <AuthButton
-        title="Continuar con Google"
+        title={isLoading ? 'Iniciando con Google...' : 'Continuar con Google'}
         onPress={onGooglePress}
+        isLoading={isLoading}
+        disabled={disabled || isLoading}
         variant="outline"
         iconName="logo-google"
         iconColor="#EA4335"

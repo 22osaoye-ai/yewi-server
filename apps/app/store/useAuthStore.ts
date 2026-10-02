@@ -2,7 +2,13 @@ import { create } from 'zustand';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserProfile } from '@/domain/auth/auth.types';
-import { clearTokens, setAccessToken, setRefreshToken, getAccessToken } from '@/services/apiClient';
+import {
+  clearTokens,
+  setAccessToken,
+  setRefreshToken,
+  getAccessToken,
+  registerAuthFailureHandler,
+} from '@/services/apiClient';
 
 export { UserProfile };
 
@@ -35,6 +41,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isLoading: false });
       return;
     }
+
+    // Safety fallback: Ensure isLoading is never permanently stuck
+    const safetyTimer = setTimeout(() => {
+      if (get().isLoading) {
+        set({ isLoading: false });
+      }
+    }, 1500);
+
     try {
       const [storedOnboarding, storedUser, storedToken] = await Promise.all([
         AsyncStorage.getItem(ONBOARDING_STORAGE_KEY),
@@ -54,12 +68,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({
         hasSeenOnboarding: hasSeen,
         user: restoredUser,
-        isAuthenticated: Boolean(restoredUser && (storedToken || restoredUser.id)),
+        isAuthenticated: Boolean(restoredUser && storedToken),
         isLoading: false,
       });
     } catch (e) {
       console.warn('Error restoring auth state:', e);
       set({ isLoading: false });
+    } finally {
+      clearTimeout(safetyTimer);
     }
   },
 
@@ -85,6 +101,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch (e) {
       console.warn('Error persisting user profile:', e);
     }
+
+    // Sincronizar bóveda biométrica si el acceso por huella está activado
+    try {
+      const { usePreferencesStore } = await import('@/store/usePreferencesStore');
+      if (usePreferencesStore.getState().biometricsEnabled) {
+        const { biometricService } = await import('@/services/biometricService');
+        await biometricService.saveCredentials(user, accessToken, refreshToken);
+      }
+    } catch {}
+
     set({
       user,
       isAuthenticated: true,
@@ -111,6 +137,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await clearTokens();
     try {
       await AsyncStorage.removeItem(USER_PROFILE_STORAGE_KEY);
+      await AsyncStorage.removeItem('@yewi_cached_my_requests');
     } catch {}
     set({
       user: null,
@@ -121,6 +148,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
   },
 }));
+
+// Auto-register apiClient 401 callback to enforce logout and immediate redirect
+registerAuthFailureHandler(() => {
+  useAuthStore.getState().logout().catch(() => {});
+});
 
 // Run auth initialization on boot (guarded for SSR)
 if (Platform.OS !== 'web' || typeof window !== 'undefined') {

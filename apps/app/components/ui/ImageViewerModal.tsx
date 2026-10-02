@@ -216,8 +216,8 @@ export function ImageViewerModal({
         {/* OPTIONAL INFO CARD OVERLAY */}
         {showInfo && (
           <Animated.View
-            entering={FadeInDown.springify().damping(18)}
-            exiting={FadeOutDown.duration(200)}
+            entering={FadeInDown.duration(200)}
+            exiting={FadeOutDown.duration(160)}
             style={[
               styles.infoCard,
               {
@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
   },
   titleText: {
     fontSize: 15.5,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
     flex: 1,
     textAlign: 'center',
     marginHorizontal: 12,
@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
   },
   infoTitle: {
     fontSize: 16,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
     marginBottom: 4,
   },
   categoryPill: {
@@ -449,11 +449,11 @@ const styles = StyleSheet.create({
   },
   categoryText: {
     fontSize: 11,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
   },
   infoDesc: {
     fontSize: 13,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Regular',
     lineHeight: 18,
   },
   bottomBarContainer: {

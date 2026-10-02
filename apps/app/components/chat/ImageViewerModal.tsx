@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   captionText: {
     color: '#FFFFFF',
     fontSize: 15,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans-Medium',
     textAlign: 'center',
   },
 });

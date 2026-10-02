@@ -260,9 +260,9 @@ export default function NotificationsScreen() {
           bg: isDark ? 'rgba(239, 68, 68, 0.2)' : '#FEE2E2',
           color: '#DC2626',
           initial: '🔥',
-          sender: item.title?.includes('Oferta') || item.title?.includes('Promoción') ? 'Oferta de Profesional' : 'Aviso Yewi',
-          ctaText: item.link === '/vouchers' ? 'Ver Cupones & Promociones' : 'Ver Detalle',
-          ctaRoute: item.link || '/vouchers',
+          sender: item.title?.includes('Oferta') || item.title?.includes('Promoción') ? 'Aviso de Profesional' : 'Aviso Yewi',
+          ctaText: 'Ver Detalle',
+          ctaRoute: item.link && item.link !== '/vouchers' ? item.link : '/(tabs)/requests',
         };
       default:
         return {
@@ -270,8 +270,8 @@ export default function NotificationsScreen() {
           color: colors.primary,
           initial: 'Y',
           sender: 'Yewi Notificaciones',
-          ctaText: item.link === '/vouchers' ? 'Ver Promociones' : 'Ver Solicitudes',
-          ctaRoute: item.link || '/(tabs)/requests',
+          ctaText: 'Ver Solicitudes',
+          ctaRoute: item.link && item.link !== '/vouchers' ? item.link : '/(tabs)/requests',
         };
     }
   };
@@ -313,7 +313,7 @@ export default function NotificationsScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: isDark ? '#121316' : '#F9FAFB' }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* 1. GMAIL HEADER BAR (Switches on selection mode) */}
       {isSelectionMode ? (
         <View
@@ -334,7 +334,7 @@ export default function NotificationsScreen() {
             <ThemedTouchable onPress={clearSelection} haptic="light">
               <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
             </ThemedTouchable>
-            <Text style={{ fontSize: 18, fontFamily: 'Satoshi-Black', color: colors.textPrimary }}>
+            <Text style={{ fontSize: 18, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary }}>
               {selectedIds.size}
             </Text>
           </View>
@@ -352,7 +352,7 @@ export default function NotificationsScreen() {
       ) : (
         <View
           style={{
-            backgroundColor: colors.surface,
+            backgroundColor: colors.background,
             paddingTop: Math.max(insets.top + 8, 28),
             paddingBottom: 14,
             paddingHorizontal: 16,
@@ -360,29 +360,31 @@ export default function NotificationsScreen() {
             alignItems: 'center',
             justifyContent: 'space-between',
             borderBottomWidth: 1,
-            borderBottomColor: colors.border,
+            borderBottomColor: colors.borderSubtle,
           }}
         >
           <View className="flex-row items-center flex-1">
             <ThemedTouchable
-              onPress={() => router.back()}
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
               haptic="light"
               style={{
-                width: 38,
-                height: 38,
-                borderRadius: 19,
-                backgroundColor: colors.surfaceAlt,
+                width: 48,
+                height: 48,
+                borderRadius: 24,
+                backgroundColor: colors.surface,
                 alignItems: 'center',
                 justifyContent: 'center',
                 marginRight: 14,
+                borderWidth: 1,
+                borderColor: colors.borderSubtle,
               }}
             >
-              <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+              <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
             </ThemedTouchable>
             <Text
               style={{
                 fontSize: 20,
-                fontFamily: 'Satoshi-Black',
+                fontFamily: 'PlusJakartaSans-ExtraBold',
                 color: colors.textPrimary,
                 letterSpacing: -0.4,
               }}
@@ -408,7 +410,7 @@ export default function NotificationsScreen() {
               }}
             >
               <Ionicons name="mail-open-outline" size={14} color={colors.primary} />
-              <Text style={{ color: colors.primary, fontFamily: 'Satoshi-Bold', fontSize: 12 }}>
+              <Text style={{ color: colors.primary, fontFamily: 'PlusJakartaSans-Bold', fontSize: 12 }}>
                 Leídas ({unreadCount})
               </Text>
             </ThemedTouchable>
@@ -437,7 +439,7 @@ export default function NotificationsScreen() {
             size={20}
             color={isAllSelected ? colors.primary : colors.textMuted}
           />
-          <Text style={{ fontSize: 13.5, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+          <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
             Seleccionar todo ({notifications.length})
           </Text>
         </ThemedTouchable>
@@ -447,7 +449,7 @@ export default function NotificationsScreen() {
       {isLoading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ marginTop: 12, fontFamily: 'Satoshi-Medium', color: colors.textSecondary, fontSize: 14 }}>
+          <Text style={{ marginTop: 12, fontFamily: 'PlusJakartaSans-Medium', color: colors.textSecondary, fontSize: 14 }}>
             Cargando notificaciones...
           </Text>
         </View>
@@ -484,13 +486,13 @@ export default function NotificationsScreen() {
               >
                 <Ionicons name="mail-unread-outline" size={36} color={colors.primary} />
               </View>
-              <Text style={{ fontSize: 18, fontFamily: 'Satoshi-Black', color: colors.textPrimary, marginBottom: 6 }}>
+              <Text style={{ fontSize: 18, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary, marginBottom: 6 }}>
                 Bandeja al día
               </Text>
               <Text
                 style={{
                   fontSize: 13.5,
-                  fontFamily: 'Satoshi-Regular',
+                  fontFamily: 'PlusJakartaSans-Regular',
                   color: colors.textSecondary,
                   textAlign: 'center',
                   maxWidth: 270,
@@ -567,7 +569,7 @@ export default function NotificationsScreen() {
                         style={{
                           color: avatar.color,
                           fontSize: 18,
-                          fontFamily: 'Satoshi-Black',
+                          fontFamily: 'PlusJakartaSans-ExtraBold',
                         }}
                       >
                         {avatar.initial}
@@ -582,7 +584,7 @@ export default function NotificationsScreen() {
                       <Text
                         style={{
                           fontSize: 14.5,
-                          fontFamily: isUnread ? 'Satoshi-Black' : 'Satoshi-Medium',
+                          fontFamily: isUnread ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-Medium',
                           color: isUnread ? (isDark ? '#FFFFFF' : '#0F172A') : (isDark ? '#94A3B8' : '#64748B'),
                           flex: 1,
                           marginRight: 6,
@@ -596,7 +598,7 @@ export default function NotificationsScreen() {
                         <Text
                           style={{
                             fontSize: 12,
-                            fontFamily: isUnread ? 'Satoshi-Bold' : 'Satoshi-Regular',
+                            fontFamily: isUnread ? 'PlusJakartaSans-Bold' : 'PlusJakartaSans-Regular',
                             color: isUnread ? colors.primary : (isDark ? '#64748B' : '#94A3B8'),
                           }}
                         >
@@ -619,7 +621,7 @@ export default function NotificationsScreen() {
                     <Text
                       style={{
                         fontSize: 13,
-                        fontFamily: isUnread ? 'Satoshi-Bold' : 'Satoshi-Regular',
+                        fontFamily: isUnread ? 'PlusJakartaSans-Bold' : 'PlusJakartaSans-Regular',
                         color: isUnread ? (isDark ? '#E2E8F0' : '#1E293B') : (isDark ? '#94A3B8' : '#64748B'),
                         lineHeight: 18,
                         marginTop: 1,
@@ -689,15 +691,15 @@ export default function NotificationsScreen() {
                   onPress={() => setSelectedNotification(null)}
                   haptic="light"
                   style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 20,
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
                     backgroundColor: colors.surfaceAlt,
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
                 >
-                  <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
+                  <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
                 </ThemedTouchable>
 
                 <View className="flex-row items-center gap-3">
@@ -705,9 +707,9 @@ export default function NotificationsScreen() {
                     onPress={() => toggleStar(selectedNotification.id)}
                     haptic="light"
                     style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
+                      width: 44,
+                      height: 44,
+                      borderRadius: 22,
                       backgroundColor: colors.surfaceAlt,
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -715,7 +717,7 @@ export default function NotificationsScreen() {
                   >
                     <Ionicons
                       name={isStarred ? 'star' : 'star-outline'}
-                      size={20}
+                      size={22}
                       color={isStarred ? '#F59E0B' : colors.textSecondary}
                     />
                   </ThemedTouchable>
@@ -727,30 +729,30 @@ export default function NotificationsScreen() {
                     }}
                     haptic="selection"
                     style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
+                      width: 44,
+                      height: 44,
+                      borderRadius: 22,
                       backgroundColor: colors.surfaceAlt,
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    <Ionicons name="mail-unread-outline" size={20} color={colors.textSecondary} />
+                    <Ionicons name="mail-unread-outline" size={22} color={colors.textSecondary} />
                   </ThemedTouchable>
 
                   <ThemedTouchable
                     onPress={() => handleDelete(selectedNotification.id)}
                     haptic="heavy"
                     style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
+                      width: 44,
+                      height: 44,
+                      borderRadius: 22,
                       backgroundColor: '#FEE2E2',
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    <Ionicons name="trash-outline" size={20} color="#DC2626" />
+                    <Ionicons name="trash-outline" size={22} color="#DC2626" />
                   </ThemedTouchable>
                 </View>
               </View>
@@ -775,7 +777,7 @@ export default function NotificationsScreen() {
                       marginRight: 14,
                     }}
                   >
-                    <Text style={{ color: avatar.color, fontSize: 22, fontFamily: 'Satoshi-Black' }}>
+                    <Text style={{ color: avatar.color, fontSize: 22, fontFamily: 'PlusJakartaSans-ExtraBold' }}>
                       {avatar.initial}
                     </Text>
                   </View>
@@ -783,7 +785,7 @@ export default function NotificationsScreen() {
                     <Text
                       style={{
                         fontSize: 16,
-                        fontFamily: 'Satoshi-Black',
+                        fontFamily: 'PlusJakartaSans-ExtraBold',
                         color: colors.textPrimary,
                       }}
                     >
@@ -792,7 +794,7 @@ export default function NotificationsScreen() {
                     <Text
                       style={{
                         fontSize: 12,
-                        fontFamily: 'Satoshi-Regular',
+                        fontFamily: 'PlusJakartaSans-Regular',
                         color: colors.textMuted,
                         marginTop: 2,
                       }}
@@ -806,7 +808,7 @@ export default function NotificationsScreen() {
                 <Text
                   style={{
                     fontSize: 20,
-                    fontFamily: 'Satoshi-Black',
+                    fontFamily: 'PlusJakartaSans-ExtraBold',
                     color: colors.textPrimary,
                     marginBottom: 16,
                     lineHeight: 26,
@@ -829,7 +831,7 @@ export default function NotificationsScreen() {
                   <Text
                     style={{
                       fontSize: 15,
-                      fontFamily: 'Satoshi-Regular',
+                      fontFamily: 'PlusJakartaSans-Regular',
                       color: colors.textPrimary,
                       lineHeight: 23,
                     }}
@@ -864,7 +866,7 @@ export default function NotificationsScreen() {
                     }}
                   >
                     <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
-                    <Text style={{ color: '#FFFFFF', fontSize: 15, fontFamily: 'Satoshi-Bold' }}>
+                    <Text style={{ color: '#FFFFFF', fontSize: 15, fontFamily: 'PlusJakartaSans-Bold' }}>
                       {avatar.ctaText}
                     </Text>
                   </ThemedTouchable>
@@ -890,7 +892,7 @@ export default function NotificationsScreen() {
                   }}
                 >
                   <Ionicons name="mail-unread-outline" size={18} color={colors.textPrimary} />
-                  <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: 'Satoshi-Bold' }}>
+                  <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: 'PlusJakartaSans-Bold' }}>
                     Marcar como no leído
                   </Text>
                 </ThemedTouchable>

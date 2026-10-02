@@ -1,4 +1,6 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiRequest } from './apiClient';
+import { SAMPLE_PROFESSIONALS } from '@/constants/sampleData';
 
 export interface PortfolioItem {
   id: string;
@@ -87,8 +89,28 @@ export interface CreatePortfolioItemPayload {
   tags?: string[];
 }
 
+const STORAGE_PROFESSIONALS_KEY = '@yewi_cache_professionals_all';
+let inMemoryProfessionalsCache: ProfessionalDetail[] | null = null;
+
 export const professionalsApi = {
-  async searchProfessionals(filters: SearchProfessionalsFilters = {}) {
+  async getCachedProfessionals(): Promise<ProfessionalDetail[]> {
+    if (inMemoryProfessionalsCache && inMemoryProfessionalsCache.length > 0) {
+      return inMemoryProfessionalsCache;
+    }
+    try {
+      const stored = await AsyncStorage.getItem(STORAGE_PROFESSIONALS_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          inMemoryProfessionalsCache = parsed;
+          return parsed;
+        }
+      }
+    } catch {}
+    return SAMPLE_PROFESSIONALS;
+  },
+
+  async searchProfessionals(filters: SearchProfessionalsFilters = {}): Promise<SearchProfessionalsResponse> {
     const params = new URLSearchParams();
     if (filters.q) params.append('q', filters.q);
     if (filters.category) params.append('category', filters.category);
@@ -100,9 +122,28 @@ export const professionalsApi = {
 
     const queryString = params.toString();
     const endpoint = `/professionals${queryString ? `?${queryString}` : ''}`;
-    return apiRequest<SearchProfessionalsResponse>(endpoint, {
-      method: 'GET',
-    });
+    try {
+      const res = await apiRequest<SearchProfessionalsResponse>(endpoint, {
+        method: 'GET',
+        timeoutMs: 7000,
+      });
+
+      if (res?.items && Array.isArray(res.items) && res.items.length > 0) {
+        if (!filters.q && !filters.category && !filters.city && !filters.skill) {
+          inMemoryProfessionalsCache = res.items;
+          AsyncStorage.setItem(STORAGE_PROFESSIONALS_KEY, JSON.stringify(res.items)).catch(() => {});
+        }
+      }
+      return res;
+    } catch (err) {
+      const fallbackItems = await this.getCachedProfessionals();
+      return {
+        items: fallbackItems,
+        total: fallbackItems.length,
+        limit: filters.limit || 50,
+        offset: filters.offset || 0,
+      };
+    }
   },
 
   async getPublicProfile(id: string) {

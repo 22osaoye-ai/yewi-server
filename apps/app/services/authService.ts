@@ -76,8 +76,12 @@ export class AuthService {
 
   // 6. Cierre de sesión (NestJS Passport + Limpieza de tokens seguros)
   async logout(): Promise<void> {
-    await authApi.logout();
-    await clearTokens();
+    try {
+      await authApi.logout();
+    } catch (e) {
+      console.warn('[authService] Error notifying backend of logout:', e);
+    }
+    await useAuthStore.getState().logout();
   }
 
   // 7. Eliminar cuenta y datos personales (cumplimiento Apple & Google Play)
@@ -88,6 +92,19 @@ export class AuthService {
       console.warn('Error deleting account from API:', e);
     }
     await useAuthStore.getState().logout();
+  }
+
+  // 8. Comprobar disponibilidad de email, teléfono o NIF/CIF en tiempo real (Flash)
+  async checkAvailability(
+    params: {
+      email?: string;
+      phoneNumber?: string;
+      country?: string;
+      taxId?: string;
+    },
+    signal?: AbortSignal
+  ) {
+    return authApi.checkAvailability(params, signal);
   }
 }
 

@@ -18,20 +18,18 @@ import { ThemedTouchable } from '@/components/ui/ThemedTouchable';
 import { CustomAlert } from '@/components/ui/CustomAlert';
 import { AuthInput } from '@/components/auth/AuthInput';
 import { useAppTheme } from '@/hooks/useAppTheme';
-import { useAuthStore } from '@/store/useAuthStore';
+import { useUserRole } from '@/hooks/useUserRole';
 import { leadsApi, ServiceRequestItem } from '@/services/leadsApi';
-import { paymentsApi } from '@/services/paymentsApi';
 import { toast } from '@/store/useToastStore';
+import { useBudgetStore } from '@/store/useBudgetStore';
 
 
 export default function RequestDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useAppTheme();
-  const { user } = useAuthStore();
+  const { user, isProfessional } = useUserRole();
   const { id } = useLocalSearchParams<{ id?: string }>();
-
-  const isProfessional = user?.roles?.includes('PROFESSIONAL');
 
   const [request, setRequest] = useState<ServiceRequestItem | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -42,8 +40,21 @@ export default function RequestDetailScreen() {
   const [showSendProposalModal, setShowSendProposalModal] = useState<boolean>(false);
   const [proposalPrice, setProposalPrice] = useState<string>('');
   const [proposalDays, setProposalDays] = useState<string>('3');
-
   const [proposalDesc, setProposalDesc] = useState<string>('');
+
+  const { appliedBudget, consumeAppliedBudget } = useBudgetStore();
+
+  useEffect(() => {
+    if (appliedBudget && (!appliedBudget.requestId || appliedBudget.requestId === id)) {
+      const budget = consumeAppliedBudget(id);
+      if (budget) {
+        setProposalPrice(budget.totalPrice.toFixed(0));
+        setProposalDesc(budget.breakdownText);
+        setProposalDays(String(budget.estimatedDays));
+        setShowSendProposalModal(true);
+      }
+    }
+  }, [appliedBudget, id, consumeAppliedBudget]);
   const [isSendingProposal, setIsSendingProposal] = useState<boolean>(false);
   const [isCheckingPro, setIsCheckingPro] = useState<boolean>(false);
   const [acceptingProposalId, setAcceptingProposalId] = useState<string | null>(null);
@@ -112,25 +123,11 @@ export default function RequestDetailScreen() {
       toast.warning('Solicitud no disponible', 'Esta solicitud ya tiene un trabajo en curso.');
       return;
     }
-    try {
-      setIsCheckingPro(true);
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-
-      const subStatus = await paymentsApi.getSubscriptionStatus();
-      if (!subStatus.isPro) {
-        router.push('/subscription');
-        return;
-      }
-
-      setProposalPrice(request?.budgetEstimated ? String(request.budgetEstimated) : '');
-      setProposalDays('3');
-      setProposalDesc('');
-      setShowSendProposalModal(true);
-    } catch {
-      router.push('/subscription');
-    } finally {
-      setIsCheckingPro(false);
-    }
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setProposalPrice(request?.budgetEstimated ? String(request.budgetEstimated) : '');
+    setProposalDays('3');
+    setProposalDesc('');
+    setShowSendProposalModal(true);
   };
 
   const handleSendProposal = async () => {
@@ -202,7 +199,11 @@ export default function RequestDetailScreen() {
       setIsDeleting(true);
       await leadsApi.deleteRequest(request.id);
       toast.info('Solicitud eliminada');
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/requests');
+      }
     } catch (e: any) {
       toast.error('Error al Eliminar', e.message || 'No se pudo eliminar la solicitud.');
     } finally {
@@ -248,40 +249,42 @@ export default function RequestDetailScreen() {
       : '#475569';
 
   return (
-    <View style={{ flex: 1, backgroundColor: isDark ? '#101216' : '#F8FAFC' }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       {/* Top Header Bar */}
       <View
         style={{
           paddingTop: Math.max(insets.top + 8, 20),
           paddingBottom: 14,
           paddingHorizontal: 18,
-          backgroundColor: isDark ? '#161922' : '#FFFFFF',
+          backgroundColor: colors.background,
           borderBottomWidth: 1,
-          borderBottomColor: isDark ? '#222734' : '#F1F5F9',
+          borderBottomColor: colors.borderSubtle,
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
         }}
       >
         <ThemedTouchable
-          onPress={() => router.back()}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/requests'))}
           haptic="light"
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: 20,
-            backgroundColor: isDark ? '#202532' : '#F1F5F9',
+            width: 46,
+            height: 46,
+            borderRadius: 23,
+            backgroundColor: colors.surface,
+            borderWidth: 1,
+            borderColor: colors.borderSubtle,
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
+          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </ThemedTouchable>
 
         <Text
           style={{
             fontSize: 17,
-            fontFamily: 'Satoshi-Black',
+            fontFamily: 'PlusJakartaSans-ExtraBold',
             color: colors.textPrimary,
             letterSpacing: -0.3,
           }}
@@ -289,25 +292,25 @@ export default function RequestDetailScreen() {
           Detalle de Solicitud
         </Text>
 
-        <View style={{ width: 40 }} />
+        <View style={{ width: 46 }} />
       </View>
 
       {/* Main Content */}
       {isLoading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ marginTop: 12, fontFamily: 'Satoshi-Medium', color: colors.textSecondary }}>
+          <Text style={{ marginTop: 12, fontFamily: 'PlusJakartaSans-Medium', color: colors.textSecondary }}>
             Cargando solicitud...
           </Text>
         </View>
       ) : error || !request ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 30 }}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
-          <Text style={{ marginTop: 12, fontSize: 16, fontFamily: 'Satoshi-Bold', color: colors.textPrimary, textAlign: 'center' }}>
+          <Text style={{ marginTop: 12, fontSize: 16, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary, textAlign: 'center' }}>
             {error || 'No se encontró la solicitud'}
           </Text>
           <ThemedTouchable
-            onPress={() => router.back()}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/requests'))}
             style={{
               marginTop: 20,
               paddingHorizontal: 24,
@@ -316,7 +319,7 @@ export default function RequestDetailScreen() {
               backgroundColor: colors.primary,
             }}
           >
-            <Text style={{ color: '#FFFFFF', fontFamily: 'Satoshi-Bold' }}>Volver</Text>
+            <Text style={{ color: '#FFFFFF', fontFamily: 'PlusJakartaSans-Bold' }}>Volver</Text>
           </ThemedTouchable>
         </View>
       ) : (
@@ -362,7 +365,7 @@ export default function RequestDetailScreen() {
                   paddingVertical: 5,
                 }}
               >
-                <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Bold', color: colors.primary }}>
+                <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.primary }}>
                   {categoryName}
                 </Text>
               </View>
@@ -375,7 +378,7 @@ export default function RequestDetailScreen() {
                   paddingVertical: 4,
                 }}
               >
-                <Text style={{ fontSize: 12, fontFamily: 'Satoshi-Bold', color: statusTextColor }}>
+                <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans-Bold', color: statusTextColor }}>
                   {statusLabel}
                 </Text>
               </View>
@@ -385,7 +388,7 @@ export default function RequestDetailScreen() {
             <Text
               style={{
                 fontSize: 22,
-                fontFamily: 'Satoshi-Black',
+                fontFamily: 'PlusJakartaSans-ExtraBold',
                 color: colors.textPrimary,
                 marginBottom: 14,
                 letterSpacing: -0.4,
@@ -411,7 +414,7 @@ export default function RequestDetailScreen() {
                 }}
               >
                 <Ionicons name="location-outline" size={16} color={colors.primary} />
-                <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+                <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
                   {request.city || 'Zaragoza'} {request.postalCode ? `(${request.postalCode})` : ''}
                 </Text>
               </View>
@@ -430,7 +433,7 @@ export default function RequestDetailScreen() {
                 }}
               >
                 <Ionicons name="cash-outline" size={16} color={colors.primary} />
-                <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Bold', color: colors.primary }}>
+                <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Bold', color: colors.primary }}>
                   {budgetDisplay}
                 </Text>
               </View>
@@ -450,7 +453,7 @@ export default function RequestDetailScreen() {
                   }}
                 >
                   <Ionicons name="calendar-outline" size={15} color={colors.textSecondary} />
-                  <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Medium', color: colors.textSecondary }}>
+                  <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Medium', color: colors.textSecondary }}>
                     {new Date(request.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                   </Text>
                 </View>
@@ -472,7 +475,7 @@ export default function RequestDetailScreen() {
             <Text
               style={{
                 fontSize: 12,
-                fontFamily: 'Satoshi-Black',
+                fontFamily: 'PlusJakartaSans-ExtraBold',
                 color: colors.textMuted,
                 textTransform: 'uppercase',
                 letterSpacing: 0.6,
@@ -484,7 +487,7 @@ export default function RequestDetailScreen() {
             <Text
               style={{
                 fontSize: 14.5,
-                fontFamily: 'Satoshi-Regular',
+                fontFamily: 'PlusJakartaSans-Regular',
                 color: colors.textPrimary,
                 lineHeight: 23,
               }}
@@ -507,12 +510,12 @@ export default function RequestDetailScreen() {
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 <Ionicons name="checkmark-circle" size={22} color="#2563EB" />
-                <Text style={{ fontSize: 16, fontFamily: 'Satoshi-Black', color: isDark ? '#93C5FD' : '#1E40AF' }}>
+                <Text style={{ fontSize: 16, fontFamily: 'PlusJakartaSans-ExtraBold', color: isDark ? '#93C5FD' : '#1E40AF' }}>
                   {isOwner ? 'Profesional Asignado (En Curso)' : '¡Trabajo Asignado! (En Curso)'}
                 </Text>
               </View>
 
-              <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Regular', color: isDark ? '#BFDBFE' : '#1E3A8A', marginBottom: 14 }}>
+              <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Regular', color: isDark ? '#BFDBFE' : '#1E3A8A', marginBottom: 14 }}>
                 {isOwner
                   ? 'Has aceptado este presupuesto. Podéis coordinar todos los detalles del trabajo a través del chat privado o por llamada.'
                   : 'Este presupuesto ha sido formalizado. Podéis coordinar todos los detalles y el inicio del servicio en el chat privado.'}
@@ -544,10 +547,10 @@ export default function RequestDetailScreen() {
                     }}
                   >
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <Text style={{ fontSize: 15.5, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+                      <Text style={{ fontSize: 15.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
                         {contactName}
                       </Text>
-                      <Text style={{ fontSize: 18, fontFamily: 'Satoshi-Black', color: '#2563EB' }}>
+                      <Text style={{ fontSize: 18, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#2563EB' }}>
                         {ord.totalAmount} €
                       </Text>
                     </View>
@@ -555,18 +558,18 @@ export default function RequestDetailScreen() {
                     {Boolean(contactPhone) && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
                         <Ionicons name="call-outline" size={15} color={colors.textSecondary} />
-                        <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Medium', color: colors.textSecondary }}>
+                        <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Medium', color: colors.textSecondary }}>
                           Teléfono: {contactPhone}
                         </Text>
                       </View>
                     )}
 
                     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderTopColor: isDark ? '#334155' : '#E5E7EB' }}>
-                      <Text style={{ fontSize: 12, fontFamily: 'Satoshi-Medium', color: colors.textMuted }}>
+                      <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans-Medium', color: colors.textMuted }}>
                         Nº Pedido: {ord.orderNumber}
                       </Text>
                       <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
-                        <Text style={{ fontSize: 11.5, fontFamily: 'Satoshi-Bold', color: '#1D4ED8' }}>
+                        <Text style={{ fontSize: 11.5, fontFamily: 'PlusJakartaSans-Bold', color: '#1D4ED8' }}>
                           Presupuesto Aceptado ✓
                         </Text>
                       </View>
@@ -603,7 +606,7 @@ export default function RequestDetailScreen() {
                         }}
                       >
                         <Ionicons name="chatbubbles" size={18} color="#FFFFFF" />
-                        <Text style={{ color: '#FFFFFF', fontSize: 14, fontFamily: 'Satoshi-Bold' }}>
+                        <Text style={{ color: '#FFFFFF', fontSize: 14, fontFamily: 'PlusJakartaSans-Bold' }}>
                           {isOwner
                             ? 'Abrir Chat Privado con el Profesional'
                             : 'Abrir Chat Privado con el Cliente'}
@@ -622,7 +625,7 @@ export default function RequestDetailScreen() {
               <Text
                 style={{
                   fontSize: 18,
-                  fontFamily: 'Satoshi-Black',
+                  fontFamily: 'PlusJakartaSans-ExtraBold',
                   color: colors.textPrimary,
                   marginBottom: 12,
                 }}
@@ -643,10 +646,10 @@ export default function RequestDetailScreen() {
                   }}
                 >
                   <Ionicons name="time-outline" size={36} color={colors.textMuted} style={{ marginBottom: 8 }} />
-                  <Text style={{ fontSize: 15, fontFamily: 'Satoshi-Bold', color: colors.textPrimary, marginBottom: 4, textAlign: 'center' }}>
+                  <Text style={{ fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary, marginBottom: 4, textAlign: 'center' }}>
                     Esperando presupuestos
                   </Text>
-                  <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, textAlign: 'center', maxWidth: 280 }}>
+                  <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, textAlign: 'center', maxWidth: 280 }}>
                     Los profesionales verificados de tu zona han sido notificados. Recibirás una alerta en cuanto envíen sus ofertas.
                   </Text>
                 </View>
@@ -672,28 +675,28 @@ export default function RequestDetailScreen() {
                       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                           <Ionicons name="shield-checkmark" size={18} color={colors.primary} />
-                          <Text style={{ fontSize: 15, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+                          <Text style={{ fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
                             {proName}
                           </Text>
                         </View>
-                        <Text style={{ fontSize: 18, fontFamily: 'Satoshi-Black', color: colors.primary }}>
+                        <Text style={{ fontSize: 18, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.primary }}>
                           {prop.price} €
                         </Text>
                       </View>
 
-                      <Text style={{ fontSize: 13.5, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, lineHeight: 20, marginBottom: 12 }}>
+                      <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, lineHeight: 20, marginBottom: 12 }}>
                         {prop.message || prop.description || 'Presupuesto de servicio'}
                       </Text>
 
                       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, borderTopWidth: 1, borderTopColor: isDark ? '#222734' : '#F1F5F9' }}>
-                        <Text style={{ fontSize: 12, fontFamily: 'Satoshi-Medium', color: colors.textMuted }}>
+                        <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans-Medium', color: colors.textMuted }}>
                           ⏱️ Plazo: {prop.deliveryDays || prop.estimatedDays || 3} días
                         </Text>
 
                         {prop.status === 'ACCEPTED' ? (
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                             <View style={{ backgroundColor: '#D1FAE5', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 }}>
-                              <Text style={{ color: '#065F46', fontSize: 12, fontFamily: 'Satoshi-Bold' }}>
+                              <Text style={{ color: '#065F46', fontSize: 12, fontFamily: 'PlusJakartaSans-Bold' }}>
                                 Aceptado ✓
                               </Text>
                             </View>
@@ -715,14 +718,14 @@ export default function RequestDetailScreen() {
                                 borderRadius: 999,
                               }}
                             >
-                              <Text style={{ color: colors.primary, fontSize: 12, fontFamily: 'Satoshi-Bold' }}>
+                              <Text style={{ color: colors.primary, fontSize: 12, fontFamily: 'PlusJakartaSans-Bold' }}>
                                 💬 Chat
                               </Text>
                             </ThemedTouchable>
                           </View>
                         ) : prop.status === 'REJECTED' ? (
                           <View style={{ backgroundColor: '#FEE2E2', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999 }}>
-                            <Text style={{ color: '#991B1B', fontSize: 12, fontFamily: 'Satoshi-Bold' }}>
+                            <Text style={{ color: '#991B1B', fontSize: 12, fontFamily: 'PlusJakartaSans-Bold' }}>
                               Rechazado
                             </Text>
                           </View>
@@ -741,7 +744,7 @@ export default function RequestDetailScreen() {
                             {acceptingProposalId === prop.id ? (
                               <ActivityIndicator size="small" color="#FFFFFF" />
                             ) : (
-                              <Text style={{ color: '#FFFFFF', fontSize: 13, fontFamily: 'Satoshi-Bold' }}>
+                              <Text style={{ color: '#FFFFFF', fontSize: 13, fontFamily: 'PlusJakartaSans-Bold' }}>
                                 Aceptar Presupuesto
                               </Text>
                             )}
@@ -776,7 +779,7 @@ export default function RequestDetailScreen() {
                   ) : (
                     <>
                       <Ionicons name="trash-outline" size={18} color="#DC2626" />
-                      <Text style={{ color: '#DC2626', fontSize: 14, fontFamily: 'Satoshi-Bold' }}>
+                      <Text style={{ color: '#DC2626', fontSize: 14, fontFamily: 'PlusJakartaSans-Bold' }}>
                         Eliminar esta Solicitud
                       </Text>
                     </>
@@ -825,7 +828,7 @@ export default function RequestDetailScreen() {
                             : colors.primary
                         }
                       />
-                      <Text style={{ fontSize: 16, fontFamily: 'Satoshi-Black', color: colors.textPrimary }}>
+                      <Text style={{ fontSize: 16, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary }}>
                         Tu Presupuesto Enviado
                       </Text>
                     </View>
@@ -847,7 +850,7 @@ export default function RequestDetailScreen() {
                       <Text
                         style={{
                           fontSize: 11.5,
-                          fontFamily: 'Satoshi-Bold',
+                          fontFamily: 'PlusJakartaSans-Bold',
                           color:
                             myExistingProposal.status === 'ACCEPTED'
                               ? isDark ? '#6EE7B7' : '#065F46'
@@ -881,18 +884,18 @@ export default function RequestDetailScreen() {
                     }}
                   >
                     <View>
-                      <Text style={{ fontSize: 11, fontFamily: 'Satoshi-Medium', color: colors.textMuted }}>
+                      <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans-Medium', color: colors.textMuted }}>
                         Precio Ofertado
                       </Text>
-                      <Text style={{ fontSize: 20, fontFamily: 'Satoshi-Black', color: colors.primary }}>
+                      <Text style={{ fontSize: 20, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.primary }}>
                         {myExistingProposal.price} €
                       </Text>
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
-                      <Text style={{ fontSize: 11, fontFamily: 'Satoshi-Medium', color: colors.textMuted }}>
+                      <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans-Medium', color: colors.textMuted }}>
                         Plazo Estimado
                       </Text>
-                      <Text style={{ fontSize: 14, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+                      <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
                         ⏱️ {myExistingProposal.estimatedDays || 3} días
                       </Text>
                     </View>
@@ -903,7 +906,7 @@ export default function RequestDetailScreen() {
                     <Text
                       style={{
                         fontSize: 13,
-                        fontFamily: 'Satoshi-Regular',
+                        fontFamily: 'PlusJakartaSans-Regular',
                         color: colors.textSecondary,
                         lineHeight: 19,
                         marginBottom: 14,
@@ -946,7 +949,7 @@ export default function RequestDetailScreen() {
                       }}
                     >
                       <Ionicons name="chatbubbles" size={18} color="#FFFFFF" />
-                      <Text style={{ fontSize: 14, fontFamily: 'Satoshi-Bold', color: '#FFFFFF' }}>
+                      <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans-Bold', color: '#FFFFFF' }}>
                         Abrir Chat Privado con el Cliente
                       </Text>
                     </ThemedTouchable>
@@ -962,7 +965,7 @@ export default function RequestDetailScreen() {
                       }}
                     >
                       <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
-                      <Text style={{ fontSize: 12, fontFamily: 'Satoshi-Regular', color: colors.textMuted, flex: 1 }}>
+                      <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans-Regular', color: colors.textMuted, flex: 1 }}>
                         Ya has presentado tu presupuesto. Te notificaremos en cuanto el cliente responda.
                       </Text>
                     </View>
@@ -983,10 +986,10 @@ export default function RequestDetailScreen() {
                 >
                   <Ionicons name="lock-closed" size={24} color="#D97706" />
                   <View style={{ flex: 1 }}>
-                    <Text style={{ fontSize: 14.5, fontFamily: 'Satoshi-Bold', color: isDark ? '#FCD34D' : '#92400E' }}>
+                    <Text style={{ fontSize: 14.5, fontFamily: 'PlusJakartaSans-Bold', color: isDark ? '#FCD34D' : '#92400E' }}>
                       Solicitud en Curso / Asignada
                     </Text>
-                    <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Regular', color: isDark ? '#FDE68A' : '#B45309', marginTop: 2 }}>
+                    <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Regular', color: isDark ? '#FDE68A' : '#B45309', marginTop: 2 }}>
                       Esta solicitud ya ha seleccionado a un profesional y no admite más presupuestos.
                     </Text>
                   </View>
@@ -1016,7 +1019,7 @@ export default function RequestDetailScreen() {
                   ) : (
                     <>
                       <Ionicons name="send" size={18} color="#FFFFFF" />
-                      <Text style={{ fontSize: 15, fontFamily: 'Satoshi-Bold', color: '#FFFFFF' }}>
+                      <Text style={{ fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: '#FFFFFF' }}>
                         Enviar Presupuesto al Cliente
                       </Text>
                     </>
@@ -1052,7 +1055,7 @@ export default function RequestDetailScreen() {
           >
             <View>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <Text style={{ fontSize: 20, fontFamily: 'Satoshi-Black', color: colors.textPrimary }}>
+                <Text style={{ fontSize: 20, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary }}>
                   Enviar Presupuesto
                 </Text>
                 <ThemedTouchable onPress={() => setShowSendProposalModal(false)} haptic="light">
@@ -1060,9 +1063,54 @@ export default function RequestDetailScreen() {
                 </ThemedTouchable>
               </View>
 
-              <Text style={{ fontSize: 13.5, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginBottom: 20 }}>
+              <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, marginBottom: 14 }}>
                 Presenta una oferta formal y detallada para el trabajo solicitado por el cliente.
               </Text>
+
+              {/* Botón Acceso Rápido al Generador IA con Plantillas */}
+              <ThemedTouchable
+                onPress={() => {
+                  setShowSendProposalModal(false);
+                  router.push({
+                    pathname: '/tools/budget-generator',
+                    params: {
+                      requestId: id,
+                      title: request?.title || '',
+                      category: request?.category?.name || '',
+                    },
+                  });
+                }}
+                haptic="medium"
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  borderRadius: 14,
+                  backgroundColor: isDark ? 'rgba(2, 132, 199, 0.15)' : '#E0F2FE',
+                  borderWidth: 1,
+                  borderColor: isDark ? 'rgba(2, 132, 199, 0.3)' : '#BAE6FD',
+                  marginBottom: 16,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginRight: 8 }}>
+                  <Ionicons name="sparkles" size={17} color="#0284C7" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Bold', color: isDark ? '#38BDF8' : '#0369A1' }}>
+                      Generar Presupuesto con IA
+                    </Text>
+                    <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary }} numberOfLines={1}>
+                      Plantillas y precios de mercado en un toque
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ backgroundColor: '#FDE047', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
+                  <Text style={{ fontSize: 9.5, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#000000' }}>
+                    PRO
+                  </Text>
+                </View>
+              </ThemedTouchable>
 
               <AuthInput
                 label="Precio Total Oferta (€)"
@@ -1071,8 +1119,46 @@ export default function RequestDetailScreen() {
                 onChangeText={setProposalPrice}
                 keyboardType="numeric"
                 leftIcon="cash-outline"
-                containerStyle={{ marginBottom: 14 }}
+                containerStyle={{ marginBottom: 10 }}
               />
+
+              {Boolean(parseFloat(proposalPrice) > 0) && (
+                <View
+                  style={{
+                    backgroundColor: isDark ? '#1C202C' : '#F1F5F9',
+                    borderRadius: 14,
+                    padding: 12,
+                    marginBottom: 14,
+                    borderWidth: 1,
+                    borderColor: colors.borderSubtle,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary }}>
+                      Presupuesto al cliente:
+                    </Text>
+                    <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
+                      {parseFloat(proposalPrice).toFixed(2)} €
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary }}>
+                      Comisión Yewi (15%):
+                    </Text>
+                    <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Bold', color: colors.textMuted }}>
+                      -{(parseFloat(proposalPrice) * 0.15).toFixed(2)} €
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingTop: 6, borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
+                    <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary }}>
+                      Tu cobro neto en Escrow:
+                    </Text>
+                    <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#10B981' }}>
+                      {(parseFloat(proposalPrice) * 0.85).toFixed(2)} €
+                    </Text>
+                  </View>
+                </View>
+              )}
 
               <AuthInput
                 label="Días Estimados de Trabajo"
@@ -1112,7 +1198,7 @@ export default function RequestDetailScreen() {
               {isSendingProposal ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={{ fontSize: 15, fontFamily: 'Satoshi-Bold', color: '#FFFFFF' }}>
+                <Text style={{ fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: '#FFFFFF' }}>
                   Confirmar y Enviar Presupuesto
                 </Text>
               )}

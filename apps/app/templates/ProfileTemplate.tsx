@@ -48,6 +48,7 @@ import { Image } from 'expo-image';
 
 import { paymentsApi } from '@/services/paymentsApi';
 import { SkeletonBanner } from '@/components/ui/Skeleton';
+import { YewiProModal } from '@/components/subscription/YewiProModal';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PROFILE_CARD_WIDTH = Math.floor((SCREEN_WIDTH - 40 - 12) / 2);
@@ -121,18 +122,8 @@ export interface CountryPrefix {
 
 const COUNTRY_PREFIXES: CountryPrefix[] = [
   { code: 'ES', dialCode: '+34', flag: '🇪🇸', name: 'España' },
-  { code: 'PT', dialCode: '+351', flag: '🇵🇹', name: 'Portugal' },
   { code: 'FR', dialCode: '+33', flag: '🇫🇷', name: 'Francia' },
-  { code: 'IT', dialCode: '+39', flag: '🇮🇹', name: 'Italia' },
-  { code: 'DE', dialCode: '+49', flag: '🇩🇪', name: 'Alemania' },
   { code: 'GB', dialCode: '+44', flag: '🇬🇧', name: 'Reino Unido' },
-  { code: 'US', dialCode: '+1', flag: '🇺🇸', name: 'Estados Unidos' },
-  { code: 'MX', dialCode: '+52', flag: '🇲🇽', name: 'México' },
-  { code: 'AR', dialCode: '+54', flag: '🇦🇷', name: 'Argentina' },
-  { code: 'CO', dialCode: '+57', flag: '🇨🇴', name: 'Colombia' },
-  { code: 'CL', dialCode: '+56', flag: '🇨🇱', name: 'Chile' },
-  { code: 'PE', dialCode: '+51', flag: '🇵🇪', name: 'Perú' },
-  { code: 'EC', dialCode: '+593', flag: '🇪🇨', name: 'Ecuador' },
 ];
 
 export function ProfileTemplate() {
@@ -144,6 +135,12 @@ export function ProfileTemplate() {
   const isProfessional = isUserProfessional(user);
   const [isPro, setIsPro] = useState<boolean>(isProfessional);
   const [isCheckingPro, setIsCheckingPro] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      router.replace('/auth/login');
+    }
+  }, [isAuthenticated, user, router]);
 
   // Reanimated scroll shared value for sticky animated header
   const scrollY = useSharedValue(0);
@@ -218,6 +215,7 @@ export function ProfileTemplate() {
   const [isOnline, setIsOnline] = useState<boolean>(true);
   const [showPhotoModal, setShowPhotoModal] = useState<boolean>(false);
   const [showRatesModal, setShowRatesModal] = useState<boolean>(false);
+  const [showProModal, setShowProModal] = useState<boolean>(false);
   const [showSellerModal, setShowSellerModal] = useState<boolean>(false);
   const [showCountryModal, setShowCountryModal] = useState<boolean>(false);
   const [showDeleteModal, setShowDeleteModal] = useState<boolean>(false);
@@ -273,7 +271,7 @@ export function ProfileTemplate() {
     fetchMyProjects();
   }, [fetchMyProjects]);
 
-  const displayProjects = myProjects.length > 0 ? myProjects : SAMPLE_PROJECTS.slice(0, 6);
+  const displayProjects = myProjects;
 
   const handleDeleteMyProject = async (id: string) => {
     try {
@@ -581,9 +579,24 @@ export function ProfileTemplate() {
     }
   };
 
-  const displayName = user
-    ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Usuario Yewi'
-    : 'Invitado';
+  if (!isAuthenticated || !user) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator size="large" color="#0284C7" />
+      </View>
+    );
+  }
+
+  const rawDisplayName = `${user.firstName || ''} ${user.lastName || ''}`.trim();
+  const isGeneric =
+    !rawDisplayName ||
+    rawDisplayName.toLowerCase() === 'usuario google' ||
+    rawDisplayName.toLowerCase() === 'usuario de google' ||
+    rawDisplayName.toLowerCase() === 'usuario';
+
+  const displayName = !isGeneric
+    ? rawDisplayName
+    : (user.email ? user.email.split('@')[0].replace(/[._-]+/g, ' ') : 'Usuario Yewi');
 
   const userRoleBadge = isProfessional ? 'Profesional' : t.client;
 
@@ -979,9 +992,9 @@ export function ProfileTemplate() {
               }}
               numberOfLines={2}
             >
-              {user?.professionalProfile?.businessName
+              {isProfessional && user?.professionalProfile?.businessName
                 ? `${user.professionalProfile.businessName} · Trabajos garantizados y atención inmediata.`
-                : 'Profesional verificado en reformas y proyectos para el hogar.'}
+                : (user?.bio || 'Usuario en Yewi')}
             </Text>
           </View>
         </View>
@@ -996,150 +1009,254 @@ export function ProfileTemplate() {
             paddingHorizontal: 24,
           }}
         >
-          {/* Stat 1: Proyectos */}
-          <ThemedTouchable
-            onPress={() => setProfileTab('projects')}
-            haptic="selection"
-            style={{ alignItems: 'center', flex: 1 }}
-          >
-            <Text
-              style={{
-                fontSize: 18,
-                fontFamily: 'PlusJakartaSans-Bold',
-                color: isDark ? '#FFFFFF' : '#0F172A',
-                letterSpacing: -0.2,
-              }}
-            >
-              {displayProjects.length}
-            </Text>
-            <Text
-              style={{
-                fontSize: 13,
-                fontFamily: 'PlusJakartaSans-Regular',
-                color: isDark ? '#94A3B8' : '#475569',
-                marginTop: 4,
-              }}
-            >
-              Proyectos
-            </Text>
-          </ThemedTouchable>
-
-          {/* Thin Vertical Divider */}
-          <View
-            style={{
-              width: 1,
-              height: 28,
-              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.12)',
-            }}
-          />
-
-          {/* Stat 2: Valoración */}
-          <ThemedTouchable
-            onPress={() => setProfileTab('projects')}
-            haptic="selection"
-            style={{ alignItems: 'center', flex: 1 }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-              <Text
-                style={{
-                  fontSize: 18,
-                  fontFamily: 'PlusJakartaSans-Bold',
-                  color: isDark ? '#FFFFFF' : '#0F172A',
-                  letterSpacing: -0.2,
-                }}
+          {isProfessional ? (
+            <>
+              {/* Stat 1: Proyectos */}
+              <ThemedTouchable
+                onPress={() => setProfileTab('projects')}
+                haptic="selection"
+                style={{ alignItems: 'center', flex: 1 }}
               >
-                4.9
-              </Text>
-              <Ionicons name="star" size={13} color="#F59E0B" />
-            </View>
-            <Text
-              style={{
-                fontSize: 13,
-                fontFamily: 'PlusJakartaSans-Regular',
-                color: isDark ? '#94A3B8' : '#475569',
-                marginTop: 4,
-              }}
-            >
-              Valoración
-            </Text>
-          </ThemedTouchable>
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontFamily: 'PlusJakartaSans-Bold',
+                    color: isDark ? '#FFFFFF' : '#0F172A',
+                    letterSpacing: -0.2,
+                  }}
+                >
+                  {displayProjects.length}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontFamily: 'PlusJakartaSans-Regular',
+                    color: isDark ? '#94A3B8' : '#475569',
+                    marginTop: 4,
+                  }}
+                >
+                  Proyectos
+                </Text>
+              </ThemedTouchable>
 
-          {/* Thin Vertical Divider */}
-          <View
-            style={{
-              width: 1,
-              height: 28,
-              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.12)',
-            }}
-          />
+              {/* Thin Vertical Divider */}
+              <View
+                style={{
+                  width: 1,
+                  height: 28,
+                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.12)',
+                }}
+              />
 
-          {/* Stat 3: Solicitudes */}
-          <ThemedTouchable
-            onPress={() => setProfileTab('requests')}
-            haptic="selection"
-            style={{ alignItems: 'center', flex: 1 }}
-          >
-            <Text
-              style={{
-                fontSize: 18,
-                fontFamily: 'PlusJakartaSans-Bold',
-                color: isDark ? '#FFFFFF' : '#0F172A',
-                letterSpacing: -0.2,
-              }}
-            >
-              {isProfessional ? '100%' : '12'}
-            </Text>
-            <Text
-              style={{
-                fontSize: 13,
-                fontFamily: 'PlusJakartaSans-Regular',
-                color: isDark ? '#94A3B8' : '#475569',
-                marginTop: 4,
-              }}
-            >
-              Solicitudes
-            </Text>
-          </ThemedTouchable>
+              {/* Stat 2: Valoración */}
+              <ThemedTouchable
+                onPress={() => setProfileTab('projects')}
+                haptic="selection"
+                style={{ alignItems: 'center', flex: 1 }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                  <Text
+                    style={{
+                      fontSize: 18,
+                      fontFamily: 'PlusJakartaSans-Bold',
+                      color: isDark ? '#FFFFFF' : '#0F172A',
+                      letterSpacing: -0.2,
+                    }}
+                  >
+                    {user?.professionalProfile?.avgRating ? Number(user.professionalProfile.avgRating).toFixed(1) : '-'}
+                  </Text>
+                  {Boolean(user?.professionalProfile?.avgRating) && (
+                    <Ionicons name="star" size={13} color="#F59E0B" />
+                  )}
+                </View>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontFamily: 'PlusJakartaSans-Regular',
+                    color: isDark ? '#94A3B8' : '#475569',
+                    marginTop: 4,
+                  }}
+                >
+                  Valoración
+                </Text>
+              </ThemedTouchable>
+
+              {/* Thin Vertical Divider */}
+              <View
+                style={{
+                  width: 1,
+                  height: 28,
+                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.12)',
+                }}
+              />
+
+              {/* Stat 3: Solicitudes */}
+              <ThemedTouchable
+                onPress={() => setProfileTab('requests')}
+                haptic="selection"
+                style={{ alignItems: 'center', flex: 1 }}
+              >
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontFamily: 'PlusJakartaSans-Bold',
+                    color: isDark ? '#FFFFFF' : '#0F172A',
+                    letterSpacing: -0.2,
+                  }}
+                >
+                  100%
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontFamily: 'PlusJakartaSans-Regular',
+                    color: isDark ? '#94A3B8' : '#475569',
+                    marginTop: 4,
+                  }}
+                >
+                  Solicitudes
+                </Text>
+              </ThemedTouchable>
+            </>
+          ) : (
+            <>
+              {/* Stat 1: Solicitudes */}
+              <ThemedTouchable
+                onPress={() => setProfileTab('requests')}
+                haptic="selection"
+                style={{ alignItems: 'center', flex: 1 }}
+              >
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontFamily: 'PlusJakartaSans-Bold',
+                    color: isDark ? '#FFFFFF' : '#0F172A',
+                    letterSpacing: -0.2,
+                  }}
+                >
+                  0
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontFamily: 'PlusJakartaSans-Regular',
+                    color: isDark ? '#94A3B8' : '#475569',
+                    marginTop: 4,
+                  }}
+                >
+                  Solicitudes
+                </Text>
+              </ThemedTouchable>
+
+              {/* Thin Vertical Divider */}
+              <View
+                style={{
+                  width: 1,
+                  height: 28,
+                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(0, 0, 0, 0.12)',
+                }}
+              />
+
+              {/* Stat 2: Guardados */}
+              <ThemedTouchable
+                onPress={() => setProfileTab('saved')}
+                haptic="selection"
+                style={{ alignItems: 'center', flex: 1 }}
+              >
+                <Text
+                  style={{
+                    fontSize: 18,
+                    fontFamily: 'PlusJakartaSans-Bold',
+                    color: isDark ? '#FFFFFF' : '#0F172A',
+                    letterSpacing: -0.2,
+                  }}
+                >
+                  {favorites.length}
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontFamily: 'PlusJakartaSans-Regular',
+                    color: isDark ? '#94A3B8' : '#475569',
+                    marginTop: 4,
+                  }}
+                >
+                  Guardados
+                </Text>
+              </ThemedTouchable>
+            </>
+          )}
         </View>
 
         {/* Dynamic Pro Action / Onboarding Banner (Clean & Focused) */}
         {isProfessional ? (
-          <View style={{ flexDirection: 'row', gap: 10, marginHorizontal: 20, marginTop: 18 }}>
+          <View style={{ marginHorizontal: 20, marginTop: 18, gap: 10 }}>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <ThemedTouchable
+                onPress={() => router.push('/publish?type=service' as any)}
+                haptic="medium"
+                style={{
+                  flex: 1,
+                  height: 44,
+                  borderRadius: 999,
+                  backgroundColor: '#0284C7',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                <Ionicons name="add" size={19} color="#FFFFFF" />
+                <Text style={{ color: '#FFFFFF', fontSize: 13.5, fontFamily: 'PlusJakartaSans-Bold' }}>
+                  Publicar Proyecto
+                </Text>
+              </ThemedTouchable>
+
+              <ThemedTouchable
+                onPress={() => setShowRatesModal(true)}
+                haptic="light"
+                style={{
+                  height: 44,
+                  paddingHorizontal: 16,
+                  borderRadius: 999,
+                  backgroundColor: isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(0, 0, 0, 0.05)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ color: isDark ? '#FFFFFF' : '#0F172A', fontSize: 13, fontFamily: 'PlusJakartaSans-SemiBold' }}>
+                  Editar Tarifas
+                </Text>
+              </ThemedTouchable>
+            </View>
+
+            {/* Herramientas Pro: Presupuestos con IA */}
             <ThemedTouchable
-              onPress={() => router.push('/publish?type=service' as any)}
+              onPress={() => router.push('/tools/budget-generator')}
               haptic="medium"
               style={{
-                flex: 1,
                 height: 44,
                 borderRadius: 999,
-                backgroundColor: '#0284C7',
+                paddingHorizontal: 16,
+                backgroundColor: isDark ? 'rgba(2, 132, 199, 0.14)' : '#EFF6FF',
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(2, 132, 199, 0.3)' : '#BFDBFE',
                 flexDirection: 'row',
                 alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
+                justifyContent: 'space-between',
               }}
             >
-              <Ionicons name="add" size={19} color="#FFFFFF" />
-              <Text style={{ color: '#FFFFFF', fontSize: 13.5, fontFamily: 'PlusJakartaSans-Bold' }}>
-                Publicar Proyecto
-              </Text>
-            </ThemedTouchable>
-
-            <ThemedTouchable
-              onPress={() => setShowRatesModal(true)}
-              haptic="light"
-              style={{
-                height: 44,
-                paddingHorizontal: 16,
-                borderRadius: 999,
-                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(0, 0, 0, 0.05)',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text style={{ color: isDark ? '#FFFFFF' : '#0F172A', fontSize: 13, fontFamily: 'PlusJakartaSans-SemiBold' }}>
-                Editar Tarifas
-              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="sparkles" size={17} color="#0284C7" />
+                <Text style={{ color: isDark ? '#38BDF8' : '#0369A1', fontSize: 13.5, fontFamily: 'PlusJakartaSans-Bold' }}>
+                  Generador de Presupuestos IA
+                </Text>
+              </View>
+              <View style={{ backgroundColor: '#FDE047', paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 999 }}>
+                <Text style={{ fontSize: 10, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#000000' }}>
+                  PRO
+                </Text>
+              </View>
             </ThemedTouchable>
           </View>
         ) : (
@@ -1295,84 +1412,122 @@ export function ProfileTemplate() {
           })}
         </View>
 
-        {/* TAB 1: PORTAFOLIO / PROYECTOS (Consistent Yewi Cards: Rating Badge + Price Pill + Circular Arrow ↗) */}
+        {/* TAB 1: PORTAFOLIO / PROYECTOS (Consistent Yewi Cards: Price Pill + Circular Arrow ↗ - Zero Ratings on Services) */}
         {profileTab === 'projects' && (
           <Animated.View entering={FadeIn.duration(160)}>
-            <View
-              style={{
-                flexDirection: 'row',
-                flexWrap: 'wrap',
-                justifyContent: 'space-between',
-                paddingHorizontal: 20,
-                rowGap: 16,
-              }}
-            >
-              {displayProjects.map((p) => {
-                const coverUri =
-                  p.coverImages?.[0] ||
-                  p.professionalProfile?.portfolioItems?.[0]?.imageUrls?.[0] ||
-                  'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=800&q=80';
-                const price = p.packages?.[0]?.price || 300;
-                const rating = p.professionalProfile?.avgRating || 5.0;
-
-                return (
+            {displayProjects.length === 0 ? (
+              <View
+                style={{
+                  width: '100%',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingVertical: 48,
+                  paddingHorizontal: 20,
+                }}
+              >
+                <View
+                  style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: 28,
+                    backgroundColor: isDark ? '#27272A' : '#F1F5F9',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 12,
+                  }}
+                >
+                  <Ionicons name="briefcase-outline" size={26} color={isDark ? '#94A3B8' : '#64748B'} />
+                </View>
+                <Text
+                  style={{
+                    fontSize: 16,
+                    fontFamily: 'PlusJakartaSans-Bold',
+                    color: colors.textPrimary,
+                    marginBottom: 4,
+                  }}
+                >
+                  Sin proyectos
+                </Text>
+                <Text
+                  style={{
+                    fontSize: 13,
+                    fontFamily: 'PlusJakartaSans-Regular',
+                    color: colors.textMuted,
+                    textAlign: 'center',
+                    maxWidth: 260,
+                    marginBottom: 16,
+                  }}
+                >
+                  {isProfessional
+                    ? 'Aún no has publicado ningún servicio profesional.'
+                    : 'Activa tu perfil profesional para publicar proyectos.'}
+                </Text>
+                {isProfessional && (
                   <ThemedTouchable
-                    key={p.id}
-                    onPress={() => {
-                      router.push({
-                        pathname: '/detail',
-                        params: { id: p.id, entityType: 'gig' },
-                      });
-                    }}
-                    haptic="light"
-                    activeOpacity={0.92}
+                    onPress={() => router.push('/publish?type=service' as any)}
+                    haptic="medium"
                     style={{
-                      width: PROFILE_CARD_WIDTH,
-                      height: PROFILE_CARD_HEIGHT,
-                      borderRadius: 28,
-                      overflow: 'hidden',
-                      position: 'relative',
-                      backgroundColor: isDark ? '#1C1E26' : '#F1F3F5',
-                      borderWidth: 1,
-                      borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+                      paddingHorizontal: 20,
+                      paddingVertical: 10,
+                      borderRadius: 999,
+                      backgroundColor: '#0284C7',
                     }}
-                    accessibilityRole="button"
-                    accessibilityLabel={p.title}
                   >
-                    {/* Full Card Image (Exact Home Standard - Edge-to-Edge) */}
-                    <Image
-                      source={{ uri: coverUri }}
-                      style={StyleSheet.absoluteFill}
-                      contentFit="cover"
-                      transition={150}
-                      cachePolicy="memory-disk"
-                    />
+                    <Text style={{ color: '#FFFFFF', fontSize: 13, fontFamily: 'PlusJakartaSans-Bold' }}>
+                      Publicar Proyecto
+                    </Text>
+                  </ThemedTouchable>
+                )}
+              </View>
+            ) : (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                  justifyContent: 'space-between',
+                  paddingHorizontal: 20,
+                  rowGap: 16,
+                }}
+              >
+                {displayProjects.map((p) => {
+                  const coverUri =
+                    p.coverImages?.[0] ||
+                    p.professionalProfile?.portfolioItems?.[0]?.imageUrls?.[0] ||
+                    'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=800&q=80';
+                  const price = p.packages?.[0]?.price || 300;
 
-                    {/* Top-Left Rating Pill Badge (Exact match to Home Image 3) */}
-                    <View
-                      style={{
-                        position: 'absolute',
-                        top: 10,
-                        left: 10,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 3.5,
-                        paddingHorizontal: 9,
-                        paddingVertical: 5,
-                        borderRadius: 999,
-                        backgroundColor: '#FFFFFF',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 2 },
-                        shadowOpacity: 0.06,
-                        shadowRadius: 3,
-                        elevation: 2,
+                  return (
+                    <ThemedTouchable
+                      key={p.id}
+                      onPress={() => {
+                        router.push({
+                          pathname: '/detail',
+                          params: { id: p.id, entityType: 'gig' },
+                        });
                       }}
+                      haptic="light"
+                      activeOpacity={0.92}
+                      style={{
+                        width: PROFILE_CARD_WIDTH,
+                        height: PROFILE_CARD_HEIGHT,
+                        borderRadius: 28,
+                        overflow: 'hidden',
+                        position: 'relative',
+                        backgroundColor: isDark ? '#1C1E26' : '#F1F3F5',
+                        borderWidth: 1,
+                        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+                      }}
+                      accessibilityRole="button"
+                      accessibilityLabel={p.title}
                     >
-                      <Ionicons name="star" size={11.5} color="#F59E0B" />
-                      <Text style={{ fontSize: 11.5, fontFamily: 'PlusJakartaSans-Bold', color: '#0F172A' }}>
-                        {rating.toFixed(1)}
-                      </Text>
-                    </View>
+                      {/* Full Card Image (Exact Home Standard - Edge-to-Edge) */}
+                      <Image
+                        source={{ uri: coverUri }}
+                        style={StyleSheet.absoluteFill}
+                        contentFit="cover"
+                        transition={150}
+                        cachePolicy="memory-disk"
+                      />
 
                     {/* Top-Right Edit Action Button (for professional owner) */}
                     {isProfessional && (
@@ -1462,8 +1617,10 @@ export function ProfileTemplate() {
                 );
               })}
             </View>
+          )}
 
-            {/* SECTION: OPINIONES Y VALORACIONES (Merged under Proyectos) */}
+            {/* SECTION: OPINIONES Y VALORACIONES (Solo profesionales) */}
+            {isProfessional && (
             <View style={{ marginTop: 32, paddingHorizontal: 20 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
                 <Text
@@ -1781,6 +1938,7 @@ export function ProfileTemplate() {
                 ))}
               </View>
             </View>
+            )}
           </Animated.View>
         )}
 
@@ -2277,32 +2435,6 @@ export function ProfileTemplate() {
                         cachePolicy="memory-disk"
                       />
 
-                      {/* Top-Left Rating Pill Badge (Exact match to Home Image 3) */}
-                      <View
-                        style={{
-                          position: 'absolute',
-                          top: 10,
-                          left: 10,
-                          flexDirection: 'row',
-                          alignItems: 'center',
-                          gap: 3.5,
-                          paddingHorizontal: 9,
-                          paddingVertical: 5,
-                          borderRadius: 999,
-                          backgroundColor: '#FFFFFF',
-                          shadowColor: '#000',
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: 0.06,
-                          shadowRadius: 3,
-                          elevation: 2,
-                        }}
-                      >
-                        <Ionicons name="star" size={11.5} color="#F59E0B" />
-                        <Text style={{ fontSize: 11.5, fontFamily: 'PlusJakartaSans-Bold', color: '#0F172A' }}>
-                          {rating.toFixed(1)}
-                        </Text>
-                      </View>
-
                       {/* Top-Right Bookmark Active Button to Un-favorite */}
                       <ThemedTouchable
                         onPress={() => toggleFavorite(p.id)}
@@ -2484,7 +2616,13 @@ export function ProfileTemplate() {
         visible={showRatesModal}
         onClose={() => setShowRatesModal(false)}
         initialHourlyRate={parseFloat(hourlyRate) || undefined}
-        onRateUpdated={(newRate) => setHourlyRate(String(newRate))}
+        initialSpecs={user?.professionalProfile?.skills || selectedSkills}
+        onRateUpdated={(newRate, newSpecs) => {
+          setHourlyRate(String(newRate));
+          if (newSpecs) {
+            setSelectedSkills(newSpecs);
+          }
+        }}
       />
 
       {/* FULL PROFESSIONAL / SELLER ONBOARDING MODAL (NON-SCROLLING STEPPER) */}
@@ -3414,6 +3552,84 @@ export function ProfileTemplate() {
             }}
           />
 
+          {/* Option: Presupuestos con IA */}
+          <ThemedTouchable
+            onPress={() => {
+              setShowActionsMenu(false);
+              router.push('/tools/budget-generator');
+            }}
+            haptic="selection"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              gap: 12,
+            }}
+          >
+            <Ionicons name="sparkles" size={20} color="#0284C7" style={{ width: 22, textAlign: 'center' }} />
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text
+                style={{
+                  fontSize: 14.5,
+                  fontFamily: 'PlusJakartaSans-Bold',
+                  color: colors.textPrimary,
+                  letterSpacing: -0.2,
+                }}
+              >
+                Presupuestos con IA
+              </Text>
+              <View style={{ backgroundColor: '#FDE047', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6 }}>
+                <Text style={{ fontSize: 9.5, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#000000' }}>
+                  PRO
+                </Text>
+              </View>
+            </View>
+          </ThemedTouchable>
+
+          {/* Option: Suscripción Yewi Pro */}
+          <ThemedTouchable
+            onPress={() => {
+              setShowActionsMenu(false);
+              router.push('/subscription' as any);
+            }}
+            haptic="selection"
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 16,
+              paddingVertical: 12,
+              gap: 12,
+            }}
+          >
+            <Ionicons name="star" size={20} color="#F59E0B" style={{ width: 22, textAlign: 'center' }} />
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text
+                style={{
+                  fontSize: 14.5,
+                  fontFamily: 'PlusJakartaSans-Bold',
+                  color: colors.textPrimary,
+                  letterSpacing: -0.2,
+                }}
+              >
+                Suscripción Yewi Pro
+              </Text>
+              <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans-Bold', color: '#F59E0B' }}>
+                15,99 €/mes
+              </Text>
+            </View>
+          </ThemedTouchable>
+
+          {/* Subtle separator */}
+          <View
+            style={{
+              height: 1,
+              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+              marginVertical: 4,
+              marginHorizontal: 14,
+            }}
+          />
+
           {/* Option 4: Compartir */}
           <ThemedTouchable
             onPress={async () => {
@@ -3464,7 +3680,10 @@ export function ProfileTemplate() {
             onPress={async () => {
               setShowActionsMenu(false);
               await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-              await signOut?.().catch(() => {});
+              try {
+                await signOut?.().catch(() => {});
+              } catch {}
+              await authService.logout();
               router.replace('/auth/login');
             }}
             haptic="medium"
@@ -3496,6 +3715,11 @@ export function ProfileTemplate() {
         title={alertConfig.title}
         message={alertConfig.message}
         onClose={() => setAlertConfig((prev) => ({ ...prev, visible: false }))}
+      />
+
+      <YewiProModal
+        visible={showProModal}
+        onClose={() => setShowProModal(false)}
       />
     </View>
   );

@@ -19,7 +19,7 @@ export default function PreferencesRoute() {
   return (
     <ProtectedRoute fallbackMessage="Inicia sesión para personalizar tus preferencias de la aplicación.">
       <PreferencesScreen
-        onBack={() => router.back()}
+        onBack={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/profile'))}
         onShowAlert={(title, message) =>
           setAlertConfig({ visible: true, title, message })
         }

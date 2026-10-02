@@ -18,7 +18,11 @@ const ERROR_CODE_TRANSLATIONS: Record<string, string> = {
   // Errores de contraseña
   form_password_length_too_short: 'La contraseña debe tener al menos 8 caracteres.',
   form_password_pwned: 'Esta contraseña es poco segura o ha sido vulnerada en la red. Elige una más segura.',
+  form_password_compromised: 'Esta contraseña ha sido vulnerada públicamente. Elige una más segura.',
   form_password_size_in_bytes_exceeded: 'La contraseña es demasiado larga.',
+  form_password_validation_failed: 'La contraseña debe incluir al menos una mayúscula, una minúscula y un número.',
+  form_password_complexity_failed: 'La contraseña debe incluir al menos una mayúscula, una minúscula y un número.',
+  form_password_not_strong_enough: 'Esta contraseña es muy predecible o débil. Elige una más segura.',
   
   // Errores de verificación (código OTP / email)
   form_code_incorrect: 'El código de verificación es incorrecto.',
@@ -37,19 +41,28 @@ const ERROR_CODE_TRANSLATIONS: Record<string, string> = {
 export function translateClerkError(err: any, fallbackMessage: string = 'Ha ocurrido un error en la autenticación.'): string {
   if (!err) return fallbackMessage;
 
-  // 1. Si es un objeto de error de Clerk con array de errors
-  const clerkErrorItem = err?.errors?.[0] || err?.fields?.identifier || err?.fields?.password || err?.fields?.code || err?.fields?.emailAddress;
-  const code = clerkErrorItem?.code || err?.code;
-  
+  // 1. Extraer el código de error oficial de Clerk
+  const code =
+    err?.code ||
+    err?.errors?.[0]?.code ||
+    err?.fields?.identifier?.code ||
+    err?.fields?.emailAddress?.code ||
+    err?.fields?.password?.code ||
+    err?.fields?.code?.code;
+
   if (code && ERROR_CODE_TRANSLATIONS[code]) {
     return ERROR_CODE_TRANSLATIONS[code];
   }
 
   // 2. Extraer el mensaje original en texto
   const rawMessage: string = (
-    clerkErrorItem?.longMessage ||
-    clerkErrorItem?.message ||
+    err?.longMessage ||
     err?.message ||
+    err?.errors?.[0]?.longMessage ||
+    err?.errors?.[0]?.message ||
+    err?.fields?.identifier?.message ||
+    err?.fields?.emailAddress?.message ||
+    err?.fields?.password?.message ||
     (typeof err === 'string' ? err : '')
   ).trim();
 
@@ -76,7 +89,17 @@ export function translateClerkError(err: any, fallbackMessage: string = 'Ha ocur
   if (lower.includes('expired') || lower.includes('has expired')) {
     return 'El código de verificación ha expirado. Solicita un nuevo código.';
   }
-  if (lower.includes('at least 8 characters') || lower.includes('password length')) {
+  if (lower.includes('pwned') || lower.includes('breach') || lower.includes('compromised') || lower.includes('easily guessed') || lower.includes('not strong enough')) {
+    return 'Esta contraseña es poco segura o ha sido filtrada. Elige una más segura.';
+  }
+  if (
+    lower.includes('complexity') ||
+    lower.includes('must contain') ||
+    (lower.includes('password') && (lower.includes('uppercase') || lower.includes('number') || lower.includes('special') || lower.includes('symbol') || lower.includes('lowercase')))
+  ) {
+    return 'La contraseña debe incluir al menos una mayúscula, una minúscula y un número.';
+  }
+  if (lower.includes('at least 8 characters') || lower.includes('password length') || lower.includes('too short')) {
     return 'La contraseña debe tener al menos 8 caracteres.';
   }
   if (lower.includes('too many requests') || lower.includes('rate limit')) {

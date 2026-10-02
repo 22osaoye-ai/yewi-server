@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, KeyboardAvoidingView, Platform, BackHandler } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { useSignUp } from '@clerk/expo';
 import { ThemedTouchable } from '@/components/ui/ThemedTouchable';
 import { CustomAlert } from '@/components/ui/CustomAlert';
@@ -22,12 +23,18 @@ import {
   getCountryByCodeOrPrefix,
   SupportedCountry,
 } from '@/constants/countryPhoneConfig';
+import { authService } from '@/services/authService';
+
+// Caché en memoria ultra-rápida (0ms de latencia, estilo Google y GitHub)
+const emailAvailabilityCache = new Map<string, { available: boolean; message: string }>();
+const phoneAvailabilityCache = new Map<string, { available: boolean; message: string }>();
+const taxIdAvailabilityCache = new Map<string, { available: boolean; message: string }>();
 
 export default function RegisterScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useAppTheme();
-  const { signUp, errors } = useSignUp();
+  const { signUp } = useSignUp();
 
   // Wizard Navigation
   const [role, setRole] = useState<UserAuthRole>('CLIENT');
@@ -38,17 +45,23 @@ export default function RegisterScreen() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
+  const [emailError, setEmailError] = useState('');
   const [countryCode, setCountryCode] = useState<'ES' | 'FR' | 'GB'>('ES');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [phoneStatus, setPhoneStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
   const [phoneError, setPhoneError] = useState('');
   const [password, setPassword] = useState('');
 
   // Verification step
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationCode, setVerificationCode] = useState('');
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [isResending, setIsResending] = useState(false);
 
   // Extended Professional Fields (Split into Step 5 Fiscal & Step 6 Location)
   const [taxId, setTaxId] = useState(''); // NIF / NIE / CIF
+  const [taxIdStatus, setTaxIdStatus] = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle');
   const [taxIdError, setTaxIdError] = useState('');
   const [businessName, setBusinessName] = useState('');
   const [province, setProvince] = useState('Zaragoza');
@@ -60,13 +73,33 @@ export default function RegisterScreen() {
   const [selectedSkills, setSelectedSkills] = useState<string[]>(['Electricidad', 'Fontanería']);
   const [bio, setBio] = useState('');
 
+  // Controladores de cancelación relámpago para abortar peticiones al instante (Google/GitHub style)
+  const emailAbortRef = useRef<AbortController | null>(null);
+  const phoneAbortRef = useRef<AbortController | null>(null);
+  const taxIdAbortRef = useRef<AbortController | null>(null);
+
+  // Pre-calentar silenciosamente el backend y limpiar cualquier sesión previa de registro
+  useEffect(() => {
+    try {
+      if (signUp && typeof (signUp as any).reset === 'function') {
+        (signUp as any).reset().catch?.(() => {});
+      }
+    } catch {}
+    authService.checkAvailability({ email: 'ping@prewarm.local' }).catch(() => {});
+    return () => {
+      emailAbortRef.current?.abort();
+      phoneAbortRef.current?.abort();
+      taxIdAbortRef.current?.abort();
+    };
+  }, []);
+
   const [alertConfig, setAlertConfig] = useState({
     visible: false,
     title: '',
     message: '',
   });
 
-  const totalSteps = role === 'CLIENT' ? 4 : 7;
+  const totalSteps = role === 'PROFESSIONAL' ? 7 : 4;
 
   const showAlert = (title: string, message: string) => {
     setAlertConfig({ visible: true, title, message });
@@ -99,53 +132,91 @@ export default function RegisterScreen() {
 
     // Step 3 Validation: Email & Phone
     if (step === 3) {
-      if (!email.trim() || !email.includes('@')) {
-        showAlert('Correo inválido', 'Ingresa un correo electrónico válido.');
+      const emailTrim = email.trim();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailTrim || !emailRegex.test(emailTrim)) {
+        setEmailStatus('invalid');
+        setEmailError('Formato de correo no válido');
+        showAlert('Correo no válido', 'Por favor ingresa un correo electrónico válido.');
         return;
       }
+
+      if (emailStatus === 'invalid' || emailError) {
+        showAlert('Correo no disponible', emailError || 'El correo electrónico ya está registrado.');
+        return;
+      }
+
       if (phoneNumber.trim()) {
         const country = getCountryByCodeOrPrefix(countryCode);
         const check = validatePhoneNumber(countryCode, country.prefix, phoneNumber);
         if (!check.isValid) {
+          setPhoneStatus('invalid');
           setPhoneError(check.message || 'Teléfono no válido.');
           showAlert('Teléfono Inválido', check.message || 'Por favor verifica el número de teléfono.');
           return;
         }
-        setPhoneError('');
+
+        if (phoneStatus === 'invalid' || phoneError) {
+          showAlert('Teléfono no disponible', phoneError || 'El número de teléfono ya está registrado.');
+          return;
+        }
       }
+
       setStep(4);
       return;
     }
 
-    // Step 4 Validation: Password
+    // Step 4 Validation: Password & Security
     if (step === 4) {
       if (password.length < 8) {
-        showAlert('Contraseña insegura', 'La contraseña debe tener al menos 8 caracteres.');
+        showAlert('Contraseña incompleta', 'La contraseña debe tener al menos 8 caracteres.');
+        return;
+      }
+      if (!/[A-Z]/.test(password)) {
+        showAlert('Contraseña incompleta', 'La contraseña debe incluir al menos una letra mayúscula.');
+        return;
+      }
+      if (!/[a-z]/.test(password)) {
+        showAlert('Contraseña incompleta', 'La contraseña debe incluir al menos una letra minúscula.');
+        return;
+      }
+      if (!/[0-9]/.test(password)) {
+        showAlert('Contraseña incompleta', 'La contraseña debe incluir al menos un número.');
         return;
       }
 
-      if (role === 'CLIENT') {
-        handleRegister();
-        return;
-      } else {
+      if (role === 'PROFESSIONAL') {
         setStep(5);
         return;
       }
+
+      handleRegister();
+      return;
     }
 
     // Step 5 Validation (Pro Only): NIF / CIF Fiscal Check (Zero Scroll)
     if (step === 5 && role === 'PROFESSIONAL') {
-      if (!taxId.trim()) {
+      const cleanTax = taxId.trim().toUpperCase();
+      if (!cleanTax) {
+        setTaxIdStatus('invalid');
+        setTaxIdError('El NIF, NIE o CIF es obligatorio');
         showAlert('NIF/CIF Obligatorio', 'Por favor ingresa tu NIF, NIE o CIF de autónomo o empresa.');
         return;
       }
 
-      const taxCheck = validateSpanishNifCifNie(taxId);
+      const taxCheck = validateSpanishNifCifNie(cleanTax);
       if (!taxCheck.isValid) {
+        setTaxIdStatus('invalid');
         setTaxIdError(taxCheck.message || 'NIF/CIF no válido');
         showAlert('NIF/CIF Inválido', taxCheck.message || 'El documento introducido no es un NIF, NIE o CIF válido en España.');
         return;
       }
+
+      if (taxIdStatus === 'invalid' || taxIdError) {
+        showAlert('NIF/CIF no disponible', taxIdError || 'El documento ya está registrado en otra cuenta.');
+        return;
+      }
+
       setTaxIdError('');
       setStep(6);
       return;
@@ -170,16 +241,317 @@ export default function RegisterScreen() {
 
   const handleBack = () => {
     if (isVerifying) {
-      setIsVerifying(false);
+      handleChangeEmail();
       return;
     }
 
     if (step > 1) {
       setStep(step - 1);
     } else {
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/auth/login');
+      }
     }
   };
+
+  const handleChangeEmail = async () => {
+    try {
+      if (signUp?.reset) {
+        await signUp.reset();
+      }
+    } catch (e) {
+      console.warn('[RegisterScreen] Error al reiniciar sesión de registro:', e);
+    }
+    setIsVerifying(false);
+    setVerificationCode('');
+    setStep(3);
+  };
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCooldown((prev) => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
+
+  useEffect(() => {
+    const onBackPress = () => {
+      handleBack();
+      return true;
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [step, isVerifying, router]);
+
+  // Comprobación relámpago en tiempo real (Algoritmo Google & GitHub, 0ms caché, 180ms debounce)
+  useEffect(() => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) {
+      emailAbortRef.current?.abort();
+      setEmailStatus('idle');
+      setEmailError('');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(trimmed)) {
+      emailAbortRef.current?.abort();
+      // Si aún no ha completado el dominio, mantener estado neutro (idle) sin llamar a red
+      if (trimmed.includes('@') && trimmed.split('@')[1]?.includes('.')) {
+        setEmailStatus('invalid');
+        setEmailError('Formato no válido');
+      } else {
+        setEmailStatus('idle');
+        setEmailError('');
+      }
+      return;
+    }
+
+    // 1. Comprobación instantánea en caché en memoria (0ms de latencia)
+    const cached = emailAvailabilityCache.get(trimmed);
+    if (cached) {
+      emailAbortRef.current?.abort();
+      if (!cached.available) {
+        setEmailStatus('invalid');
+        setEmailError(cached.message || 'Correo ya registrado');
+      } else {
+        setEmailStatus('valid');
+        setEmailError('');
+      }
+      return;
+    }
+
+    // 2. Abortar cualquier petición previa en vuelo
+    emailAbortRef.current?.abort();
+    const abortController = new AbortController();
+    emailAbortRef.current = abortController;
+
+    setEmailStatus('checking');
+    setEmailError('');
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await authService.checkAvailability({ email: trimmed }, abortController.signal);
+        if (abortController.signal.aborted) return;
+
+        if (res?.email) {
+          emailAvailabilityCache.set(trimmed, {
+            available: res.email.available,
+            message: res.email.message || 'Correo ya registrado',
+          });
+
+          if (res.email.available === false) {
+            setEmailStatus('invalid');
+            setEmailError(res.email.message || 'Correo ya registrado');
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+          } else {
+            setEmailStatus('valid');
+            setEmailError('');
+          }
+        } else {
+          // Si el servidor tardó o respondió vacío, asumir optimista (Google style)
+          setEmailStatus('valid');
+          setEmailError('');
+        }
+      } catch {
+        if (!abortController.signal.aborted) {
+          setEmailStatus('valid');
+          setEmailError('');
+        }
+      }
+    }, 180);
+
+    return () => {
+      clearTimeout(timer);
+      abortController.abort();
+    };
+  }, [email]);
+
+  // Comprobación relámpago de disponibilidad de Teléfono (Algoritmo Google & GitHub)
+  useEffect(() => {
+    const clean = phoneNumber.trim();
+    if (!clean) {
+      phoneAbortRef.current?.abort();
+      setPhoneStatus('idle');
+      setPhoneError('');
+      return;
+    }
+
+    const countryConfig = getCountryByCodeOrPrefix(countryCode);
+    const check = validatePhoneNumber(countryCode, countryConfig.prefix, clean);
+
+    // Validación sintáctica 0ms: Si aún no tiene la longitud requerida, no molestar con red ni errores
+    const rawDigits = clean.replace(/\D/g, '');
+    if (rawDigits.length < countryConfig.digitsLength) {
+      phoneAbortRef.current?.abort();
+      setPhoneStatus('idle');
+      setPhoneError('');
+      return;
+    }
+
+    if (!check.isValid) {
+      phoneAbortRef.current?.abort();
+      setPhoneStatus('invalid');
+      setPhoneError(check.message || 'Teléfono no válido');
+      return;
+    }
+
+    const phoneKey = check.e164 || `${countryConfig.prefix}${clean}`;
+
+    // 1. Comprobación instantánea en caché (0ms)
+    const cached = phoneAvailabilityCache.get(phoneKey);
+    if (cached) {
+      phoneAbortRef.current?.abort();
+      if (!cached.available) {
+        setPhoneStatus('invalid');
+        setPhoneError(cached.message || 'Teléfono ya registrado');
+      } else {
+        setPhoneStatus('valid');
+        setPhoneError('');
+      }
+      return;
+    }
+
+    // 2. Abortar petición en curso previa
+    phoneAbortRef.current?.abort();
+    const abortController = new AbortController();
+    phoneAbortRef.current = abortController;
+
+    setPhoneStatus('checking');
+    setPhoneError('');
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await authService.checkAvailability(
+          {
+            phoneNumber: phoneKey,
+            country: countryConfig.name,
+          },
+          abortController.signal
+        );
+        if (abortController.signal.aborted) return;
+
+        if (res?.phoneNumber) {
+          phoneAvailabilityCache.set(phoneKey, {
+            available: res.phoneNumber.available,
+            message: res.phoneNumber.message || 'Teléfono ya registrado',
+          });
+
+          if (res.phoneNumber.available === false) {
+            setPhoneStatus('invalid');
+            setPhoneError(res.phoneNumber.message || 'Teléfono ya registrado');
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+          } else {
+            setPhoneStatus('valid');
+            setPhoneError('');
+          }
+        } else {
+          setPhoneStatus('valid');
+          setPhoneError('');
+        }
+      } catch {
+        if (!abortController.signal.aborted) {
+          setPhoneStatus('valid');
+          setPhoneError('');
+        }
+      }
+    }, 180);
+
+    return () => {
+      clearTimeout(timer);
+      abortController.abort();
+    };
+  }, [phoneNumber, countryCode]);
+
+  // Comprobación relámpago de NIF/NIE/CIF (Algoritmo Modulo-23 AEAT en 0ms + comprobación backend)
+  useEffect(() => {
+    if (role !== 'PROFESSIONAL') return;
+    const clean = taxId.trim().toUpperCase();
+    if (!clean) {
+      taxIdAbortRef.current?.abort();
+      setTaxIdStatus('idle');
+      setTaxIdError('');
+      return;
+    }
+
+    if (clean.length < 8) {
+      taxIdAbortRef.current?.abort();
+      setTaxIdStatus('idle');
+      setTaxIdError('');
+      return;
+    }
+
+    // Algoritmo matemático AEAT local 0ms
+    const taxCheck = validateSpanishNifCifNie(clean);
+    if (!taxCheck.isValid) {
+      taxIdAbortRef.current?.abort();
+      setTaxIdStatus('invalid');
+      setTaxIdError(taxCheck.message || 'NIF/CIF no válido');
+      return;
+    }
+
+    // 1. Comprobación instantánea en caché (0ms)
+    const cached = taxIdAvailabilityCache.get(clean);
+    if (cached) {
+      taxIdAbortRef.current?.abort();
+      if (!cached.available) {
+        setTaxIdStatus('invalid');
+        setTaxIdError(cached.message || 'Documento ya registrado');
+      } else {
+        setTaxIdStatus('valid');
+        setTaxIdError('');
+      }
+      return;
+    }
+
+    // 2. Abortar petición en curso previa
+    taxIdAbortRef.current?.abort();
+    const abortController = new AbortController();
+    taxIdAbortRef.current = abortController;
+
+    setTaxIdStatus('checking');
+    setTaxIdError('');
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await authService.checkAvailability({ taxId: clean }, abortController.signal);
+        if (abortController.signal.aborted) return;
+
+        if (res?.taxId) {
+          taxIdAvailabilityCache.set(clean, {
+            available: res.taxId.available,
+            message: res.taxId.message || 'Documento ya registrado',
+          });
+
+          if (res.taxId.available === false) {
+            setTaxIdStatus('invalid');
+            setTaxIdError(res.taxId.message || 'Documento ya registrado');
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+          } else {
+            setTaxIdStatus('valid');
+            setTaxIdError('');
+          }
+        } else {
+          setTaxIdStatus('valid');
+          setTaxIdError('');
+        }
+      } catch {
+        if (!abortController.signal.aborted) {
+          setTaxIdStatus('valid');
+          setTaxIdError('');
+        }
+      }
+    }, 180);
+
+    return () => {
+      clearTimeout(timer);
+      abortController.abort();
+    };
+  }, [taxId, role]);
 
   const handleRegister = async () => {
     if (!signUp) {
@@ -189,15 +561,28 @@ export default function RegisterScreen() {
 
     setIsLoading(true);
     try {
-      // 1. Iniciar registro en Clerk
+      // 1. Iniciar registro en Clerk con credenciales
       const { error } = await signUp.password({
         emailAddress: email.trim(),
         password,
       });
 
       if (error) {
+        console.warn('[RegisterScreen] Error de Clerk al registrar:', error);
+        const rawCode = (error as any)?.code || (error as any)?.errors?.[0]?.code;
+        if (rawCode === 'form_identifier_exists') {
+          setEmailStatus('invalid');
+          setEmailError('Correo ya registrado');
+          setStep(3);
+          showAlert(
+            'Correo no disponible',
+            'Ya existe una cuenta registrada con este correo electrónico. Por favor usa otro correo o inicia sesión.'
+          );
+          setIsLoading(false);
+          return;
+        }
         const errorMsg = translateClerkError(
-          errors || error,
+          error,
           'No se pudo completar el registro.'
         );
         showAlert('Error de registro', errorMsg);
@@ -236,18 +621,90 @@ export default function RegisterScreen() {
         },
       });
 
-      // 3. Preparar verificación de correo (código OTP)
-      if ((signUp as any).prepareVerification) {
-        await (signUp as any).prepareVerification({ strategy: 'email_code' });
-      } else if ((signUp.verifications as any)?.emailAddress?.sendCode) {
-        await (signUp.verifications as any).emailAddress.sendCode();
+      // Si la cuenta ya está lista (ej. sin requerimiento de validación de correo)
+      if (signUp.status === 'complete') {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        await signUp.finalize({
+          navigate: ({ session }) => {
+            if (session?.currentTask) return;
+            router.replace('/(tabs)');
+          },
+        });
+        return;
       }
+
+      // 3. Enviar código de confirmación de correo (OTP) mediante API de Clerk
+      let sendError: any = null;
+      if (signUp.verifications?.sendEmailCode) {
+        const res = await signUp.verifications.sendEmailCode();
+        sendError = res?.error;
+      } else if (typeof (signUp as any).sendEmailCode === 'function') {
+        const res = await (signUp as any).sendEmailCode();
+        sendError = res?.error;
+      } else if (typeof (signUp as any).prepareEmailAddressVerification === 'function') {
+        await (signUp as any).prepareEmailAddressVerification({ strategy: 'email_code' });
+      } else if (typeof (signUp as any).prepareVerification === 'function') {
+        await (signUp as any).prepareVerification({ strategy: 'email_code' });
+      }
+
+      if (sendError) {
+        const errorMsg = translateClerkError(
+          sendError,
+          'No se pudo enviar el código de verificación.'
+        );
+        showAlert('Error de verificación', errorMsg);
+        setIsLoading(false);
+        return;
+      }
+
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      setResendCooldown(45);
       setIsVerifying(true);
     } catch (err: any) {
       console.error('Registration Error:', err);
       showAlert('Error', translateClerkError(err, 'Ocurrió un error inesperado al registrar.'));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (resendCooldown > 0 || isResending || !signUp) return;
+
+    setIsResending(true);
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+
+      let sendError: any = null;
+      if (signUp.verifications?.sendEmailCode) {
+        const res = await signUp.verifications.sendEmailCode();
+        sendError = res?.error;
+      } else if (typeof (signUp as any).sendEmailCode === 'function') {
+        const res = await (signUp as any).sendEmailCode();
+        sendError = res?.error;
+      } else if (typeof (signUp as any).prepareEmailAddressVerification === 'function') {
+        await (signUp as any).prepareEmailAddressVerification({ strategy: 'email_code' });
+      }
+
+      if (sendError) {
+        const errorMsg = translateClerkError(
+          sendError,
+          'No se pudo reenviar el código.'
+        );
+        showAlert('Error al reenviar', errorMsg);
+        return;
+      }
+
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      showAlert(
+        'Código reenviado',
+        `Hemos enviado un nuevo código a ${email}. Revisa tu bandeja de entrada y spam.`
+      );
+      setResendCooldown(45);
+    } catch (err: any) {
+      showAlert('Error al reenviar', translateClerkError(err, 'No se pudo reenviar el código.'));
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -261,29 +718,53 @@ export default function RegisterScreen() {
 
     setIsLoading(true);
     try {
-      let completeSignUp: any;
-      if ((signUp as any).attemptVerification) {
+      let verifyError: any = null;
+      let completeSignUp: any = null;
+
+      if (signUp.verifications?.verifyEmailCode) {
+        const res = await signUp.verifications.verifyEmailCode({
+          code: verificationCode.trim(),
+        });
+        verifyError = res?.error;
+      } else if (typeof (signUp as any).verifyEmailCode === 'function') {
+        const res = await (signUp as any).verifyEmailCode({
+          code: verificationCode.trim(),
+        });
+        verifyError = res?.error;
+      } else if (typeof (signUp as any).attemptEmailAddressVerification === 'function') {
+        completeSignUp = await (signUp as any).attemptEmailAddressVerification({
+          code: verificationCode.trim(),
+        });
+      } else if (typeof (signUp as any).attemptVerification === 'function') {
         completeSignUp = await (signUp as any).attemptVerification({
           strategy: 'email_code',
           code: verificationCode.trim(),
         });
-      } else if ((signUp.verifications as any)?.emailAddress?.verifyCode) {
-        completeSignUp = await (signUp.verifications as any).emailAddress.verifyCode({
-          code: verificationCode.trim(),
-        });
       }
 
-      if (completeSignUp?.status === 'complete' || signUp.status === 'complete') {
+      if (verifyError) {
+        const errorMsg = translateClerkError(
+          verifyError,
+          'Código de verificación inválido o expirado.'
+        );
+        showAlert('Código inválido', errorMsg);
+        return;
+      }
+
+      if (signUp.status === 'complete' || completeSignUp?.status === 'complete') {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         await signUp.finalize({
           navigate: ({ session, decorateUrl }) => {
             if (session?.currentTask) return;
             router.replace('/(tabs)');
           },
         });
+      } else {
+        showAlert('Verificación pendiente', 'Por favor confirma el código recibido para continuar.');
       }
     } catch (err: any) {
       const errorMsg = translateClerkError(
-        errors || err,
+        err,
         'Código de verificación inválido o expirado.'
       );
       showAlert('Código inválido', errorMsg);
@@ -317,7 +798,7 @@ export default function RegisterScreen() {
             <View>
               <AuthHeader
                 title="Verifica tu Correo"
-                subtitle={`Hemos enviado un código de 6 dígitos a ${email}. Introdúcelo a continuación para activar tu cuenta.`}
+                subtitle={`Hemos enviado un código de 6 dígitos a ${email}. Introdúcelo para activar tu cuenta.`}
                 onBack={handleBack}
                 showLogo={false}
                 align="left"
@@ -330,8 +811,87 @@ export default function RegisterScreen() {
                 onChangeText={setVerificationCode}
                 placeholder="123456"
                 keyboardType="numeric"
+                maxLength={6}
                 autoFocus
               />
+
+              {/* Nota informativa de spam */}
+              <View
+                style={{
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.025)',
+                  borderRadius: 12,
+                  padding: 12,
+                  marginTop: 14,
+                  borderWidth: 1,
+                  borderColor: colors.borderSubtle,
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 12.5,
+                    fontFamily: 'PlusJakartaSans-Regular',
+                    color: colors.textSecondary,
+                    lineHeight: 18,
+                  }}
+                >
+                  ¿No recibes el correo? Comprueba la carpeta de{' '}
+                  <Text style={{ fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
+                    correo no deseado (spam)
+                  </Text>{' '}
+                  o solicita un nuevo código abajo.
+                </Text>
+              </View>
+
+              {/* Acciones de reenvío y rectificación de correo */}
+              <View style={{ marginTop: 20, gap: 10 }}>
+                <ThemedTouchable
+                  onPress={handleResendCode}
+                  disabled={resendCooldown > 0 || isResending}
+                  haptic="selection"
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingVertical: 10,
+                    opacity: resendCooldown > 0 || isResending ? 0.6 : 1,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 13.5,
+                      fontFamily: 'PlusJakartaSans-SemiBold',
+                      color: colors.primary,
+                    }}
+                  >
+                    {isResending
+                      ? 'Reenviando...'
+                      : resendCooldown > 0
+                      ? `Reenviar código en ${resendCooldown}s`
+                      : 'Reenviar código'}
+                  </Text>
+                </ThemedTouchable>
+
+                <ThemedTouchable
+                  onPress={handleChangeEmail}
+                  haptic="selection"
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingVertical: 6,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 13,
+                      fontFamily: 'PlusJakartaSans-Medium',
+                      color: colors.textSecondary,
+                    }}
+                  >
+                    Corregir correo
+                  </Text>
+                </ThemedTouchable>
+              </View>
             </View>
           ) : (
             <>
@@ -341,7 +901,7 @@ export default function RegisterScreen() {
                   <Text
                     style={{
                       fontSize: 12,
-                      fontFamily: 'Satoshi-Bold',
+                      fontFamily: 'PlusJakartaSans-Bold',
                       color: colors.primary,
                       letterSpacing: 1.5,
                       textTransform: 'uppercase',
@@ -352,7 +912,7 @@ export default function RegisterScreen() {
                   <Text
                     style={{
                       fontSize: 12,
-                      fontFamily: 'Satoshi-Medium',
+                      fontFamily: 'PlusJakartaSans-Medium',
                       color: colors.textSecondary,
                     }}
                   >
@@ -443,6 +1003,9 @@ export default function RegisterScreen() {
                     placeholder="juan.perez@ejemplo.com"
                     keyboardType="email-address"
                     autoCapitalize="none"
+                    status={emailStatus}
+                    error={emailError}
+                    validMessage="✓ Correo disponible"
                     autoFocus
                   />
 
@@ -454,15 +1017,12 @@ export default function RegisterScreen() {
                       setPhoneError('');
                     }}
                     value={phoneNumber}
-                    onChangePhone={(text, res) => {
+                    onChangePhone={(text) => {
                       setPhoneNumber(text);
-                      if (text.length > 0 && !res.isValid) {
-                        setPhoneError(res.message || '');
-                      } else {
-                        setPhoneError('');
-                      }
                     }}
+                    status={phoneStatus}
                     error={phoneError}
+                    validMessage="✓ Teléfono disponible"
                   />
                 </View>
               )}
@@ -508,18 +1068,14 @@ export default function RegisterScreen() {
                     leftIcon="shield-checkmark-outline"
                     value={taxId}
                     onChangeText={(val) => {
-                      setTaxId(val);
-                      if (val.length >= 8) {
-                        const res = validateSpanishNifCifNie(val);
-                        setTaxIdError(res.isValid ? '' : (res.message || 'Formato de NIF/CIF inválido'));
-                      } else {
-                        setTaxIdError('');
-                      }
+                      setTaxId(val.toUpperCase());
                     }}
                     placeholder="Ej. 12345678Z o B12345678"
                     autoCapitalize="characters"
+                    status={taxIdStatus}
                     error={taxIdError}
-                    hint="✓ Validación oficial de dígito de control AEAT España"
+                    validMessage="✓ Documento válido y libre"
+                    hint={taxIdStatus === 'idle' ? "✓ Validación oficial de dígito de control AEAT España" : undefined}
                     autoFocus
                   />
 
@@ -572,7 +1128,7 @@ export default function RegisterScreen() {
                   <Text
                     style={{
                       fontSize: 12.5,
-                      fontFamily: 'Satoshi-Bold',
+                      fontFamily: 'PlusJakartaSans-Bold',
                       color: colors.textPrimary,
                       marginBottom: 8,
                       marginLeft: 4,
@@ -632,14 +1188,14 @@ export default function RegisterScreen() {
               isVerifying
                 ? isLoading
                   ? 'Verificando...'
-                  : 'Verificar Correo'
+                  : 'Verificar'
                 : step === totalSteps
                 ? isLoading
                   ? 'Registrando...'
                   : role === 'PROFESSIONAL'
-                  ? 'Completar Registro Profesional'
-                  : 'Completar Registro'
-                : 'Continuar →'
+                  ? 'Finalizar'
+                  : 'Registrar'
+                : 'Continuar'
             }
             onPress={isVerifying ? handleVerifyEmail : handleNext}
             isLoading={isLoading}
@@ -651,7 +1207,7 @@ export default function RegisterScreen() {
               <Text
                 style={{
                   fontSize: 13.5,
-                  fontFamily: 'Satoshi-Regular',
+                  fontFamily: 'PlusJakartaSans-Regular',
                   color: colors.textSecondary,
                 }}
               >
@@ -664,7 +1220,7 @@ export default function RegisterScreen() {
                 <Text
                   style={{
                     fontSize: 14,
-                    fontFamily: 'Satoshi-Black',
+                    fontFamily: 'PlusJakartaSans-ExtraBold',
                     color: colors.primary,
                   }}
                 >

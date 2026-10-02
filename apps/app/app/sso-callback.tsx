@@ -10,18 +10,21 @@ export default function SSOCallbackScreen() {
   const { isAuthenticated, needsProfileCompletion } = useAuthStore();
 
   useEffect(() => {
-    if (isLoaded && (isSignedIn || isAuthenticated)) {
+    if (!isLoaded) return;
+    if (isAuthenticated) {
       if (needsProfileCompletion) {
         router.replace('/auth/complete-profile');
       } else {
         router.replace('/(tabs)');
       }
+    } else if (!isSignedIn) {
+      router.replace('/auth/login');
     }
   }, [isLoaded, isSignedIn, isAuthenticated, needsProfileCompletion]);
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F8FA' }}>
-      <ActivityIndicator size="large" color="#C87D20" />
+      <ActivityIndicator size="large" color="#0284C7" />
     </View>
   );
 }

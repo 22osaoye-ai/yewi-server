@@ -78,34 +78,38 @@ export function SupportScreen({ onBack, onShowAlert }: SupportScreenProps) {
       {/* Header */}
       <View
         style={{
-          backgroundColor: colors.headerBg,
+          backgroundColor: colors.background,
           paddingTop: Math.max(insets.top + 8, 28),
           paddingBottom: 16,
           paddingHorizontal: 18,
           flexDirection: 'row',
           alignItems: 'center',
+          borderBottomWidth: 1,
+          borderBottomColor: colors.borderSubtle,
         }}
       >
         <ThemedTouchable
           onPress={onBack}
           haptic="light"
           style={{
-            width: 36,
-            height: 36,
-            borderRadius: 18,
-            backgroundColor: isDark ? '#27272A' : 'rgba(255, 255, 255, 0.2)',
+            width: 46,
+            height: 46,
+            borderRadius: 23,
+            backgroundColor: colors.surface,
             alignItems: 'center',
             justifyContent: 'center',
             marginRight: 14,
+            borderWidth: 1,
+            borderColor: colors.borderSubtle,
           }}
         >
-          <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
+          <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
         </ThemedTouchable>
         <Text
           style={{
             fontSize: 20,
-            fontFamily: 'Satoshi-Black',
-            color: '#FFFFFF',
+            fontFamily: 'PlusJakartaSans-ExtraBold',
+            color: colors.textPrimary,
             letterSpacing: -0.4,
           }}
         >
@@ -151,7 +155,7 @@ export function SupportScreen({ onBack, onShowAlert }: SupportScreenProps) {
             >
               <Ionicons name="headset-outline" size={20} color={colors.primary} />
             </View>
-            <Text style={{ fontSize: 17, fontFamily: 'Satoshi-Black', color: '#FFFFFF' }}>
+            <Text style={{ fontSize: 17, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#FFFFFF' }}>
               {t.needHelp}
             </Text>
           </View>
@@ -159,7 +163,7 @@ export function SupportScreen({ onBack, onShowAlert }: SupportScreenProps) {
           <Text
             style={{
               fontSize: 13,
-              fontFamily: 'Satoshi-Regular',
+              fontFamily: 'PlusJakartaSans-Regular',
               color: '#A1A1AA',
               lineHeight: 19,
               marginBottom: 16,
@@ -181,7 +185,7 @@ export function SupportScreen({ onBack, onShowAlert }: SupportScreenProps) {
             }}
           >
             <Ionicons name="mail-outline" size={17} color="#FFFFFF" style={{ marginRight: 8 }} />
-            <Text style={{ color: '#FFFFFF', fontSize: 14, fontFamily: 'Satoshi-Bold' }}>
+            <Text style={{ color: '#FFFFFF', fontSize: 14, fontFamily: 'PlusJakartaSans-Bold' }}>
               {t.supportEmailBtn}
             </Text>
           </ThemedTouchable>
@@ -191,7 +195,7 @@ export function SupportScreen({ onBack, onShowAlert }: SupportScreenProps) {
         <Text
           style={{
             fontSize: 17,
-            fontFamily: 'Satoshi-Black',
+            fontFamily: 'PlusJakartaSans-ExtraBold',
             color: colors.textPrimary,
             marginBottom: 12,
             marginLeft: 4,
@@ -262,7 +266,7 @@ export function SupportScreen({ onBack, onShowAlert }: SupportScreenProps) {
                       <Text
                         style={{
                           fontSize: 15,
-                          fontFamily: isExpanded ? 'Satoshi-Black' : 'Satoshi-Bold',
+                          fontFamily: isExpanded ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-Bold',
                           color: colors.textPrimary,
                         }}
                       >
@@ -271,7 +275,7 @@ export function SupportScreen({ onBack, onShowAlert }: SupportScreenProps) {
                       <Text
                         style={{
                           fontSize: 12,
-                          fontFamily: 'Satoshi-Regular',
+                          fontFamily: 'PlusJakartaSans-Regular',
                           color: colors.textSecondary,
                           marginTop: 1,
                         }}
@@ -299,7 +303,7 @@ export function SupportScreen({ onBack, onShowAlert }: SupportScreenProps) {
                     <Text
                       style={{
                         fontSize: 13.5,
-                        fontFamily: 'Satoshi-Regular',
+                        fontFamily: 'PlusJakartaSans-Regular',
                         color: colors.textSecondary,
                         lineHeight: 20,
                       }}

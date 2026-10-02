@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeOutDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useToastStore, ToastMessage } from '@/store/useToastStore';
@@ -8,7 +8,7 @@ import { useAppTheme } from '@/hooks/useAppTheme';
 
 export function ToastContainer() {
   const insets = useSafeAreaInsets();
-  const { colors, isDark } = useAppTheme();
+  const { isDark } = useAppTheme();
   const toasts = useToastStore((state) => state.toasts);
   const hideToast = useToastStore((state) => state.hideToast);
 
@@ -20,7 +20,7 @@ export function ToastContainer() {
       style={[
         styles.container,
         {
-          top: Math.max(insets.top + 6, 20),
+          bottom: Math.max(insets.bottom + 85, 96),
         },
       ]}
     >
@@ -29,7 +29,6 @@ export function ToastContainer() {
           key={item.id}
           toast={item}
           isDark={isDark}
-          colors={colors}
           onDismiss={() => hideToast(item.id)}
         />
       ))}
@@ -40,25 +39,26 @@ export function ToastContainer() {
 function ToastItem({
   toast,
   isDark,
-  colors,
   onDismiss,
 }: {
   toast: ToastMessage;
   isDark: boolean;
-  colors: any;
   onDismiss: () => void;
 }) {
+  const textColor = isDark ? '#18181B' : '#FFFFFF';
+  const subtitleColor = isDark ? '#52525B' : '#D4D4D8';
+
   const getIcon = () => {
     switch (toast.type) {
       case 'success':
-        return { name: 'checkmark-circle' as const, color: '#10B981', bg: isDark ? '#064E3B40' : '#D1FAE5' };
+        return { name: 'checkmark-circle-outline' as const, color: textColor };
       case 'error':
-        return { name: 'alert-circle' as const, color: '#EF4444', bg: isDark ? '#7F1D1D40' : '#FEE2E2' };
+        return { name: 'alert-circle-outline' as const, color: isDark ? '#DC2626' : '#F87171' };
       case 'warning':
-        return { name: 'warning' as const, color: '#F59E0B', bg: isDark ? '#78350F40' : '#FEF3C7' };
+        return { name: 'warning-outline' as const, color: isDark ? '#D97706' : '#FBBF24' };
       case 'info':
       default:
-        return { name: 'information-circle' as const, color: '#3B82F6', bg: isDark ? '#1E3A8A40' : '#DBEAFE' };
+        return { name: 'information-circle-outline' as const, color: textColor };
     }
   };
 
@@ -66,47 +66,43 @@ function ToastItem({
 
   return (
     <Animated.View
-      entering={FadeInUp.springify().damping(16).mass(0.8)}
-      exiting={FadeOutUp.duration(200)}
+      entering={FadeInDown.springify().damping(20).stiffness(240)}
+      exiting={FadeOutDown.duration(160)}
       style={[
-        styles.toastCard,
+        styles.toastPill,
         {
-          backgroundColor: isDark ? '#1E1E24' : '#FFFFFF',
-          borderColor: isDark ? '#2E2E38' : '#E4E4E7',
+          backgroundColor: isDark ? '#ECECED' : '#18181B',
+          borderColor: isDark ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.12)',
           shadowColor: '#000',
-          shadowOpacity: isDark ? 0.35 : 0.08,
+          shadowOpacity: isDark ? 0.22 : 0.28,
         },
       ]}
     >
-      <Pressable onPress={onDismiss} style={styles.pressableContent}>
-        <View style={[styles.iconWrapper, { backgroundColor: iconInfo.bg }]}>
-          <Ionicons name={iconInfo.name} size={20} color={iconInfo.color} />
-        </View>
+      <Pressable onPress={onDismiss} style={styles.pillContent}>
+        <Ionicons name={iconInfo.name} size={21} color={iconInfo.color} style={styles.icon} />
 
         <View style={styles.textWrapper}>
           <Text
             numberOfLines={1}
             style={[
               styles.title,
-              { color: isDark ? '#FFFFFF' : '#18181B' },
+              { color: textColor },
             ]}
           >
             {toast.title}
           </Text>
           {toast.message ? (
             <Text
-              numberOfLines={2}
+              numberOfLines={1}
               style={[
                 styles.message,
-                { color: isDark ? '#A1A1AA' : '#71717A' },
+                { color: subtitleColor },
               ]}
             >
               {toast.message}
             </Text>
           ) : null}
         </View>
-
-        <Ionicons name="close" size={16} color={isDark ? '#71717A' : '#A1A1AA'} />
       </Pressable>
     </Animated.View>
   );
@@ -115,49 +111,44 @@ function ToastItem({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    left: 16,
-    right: 16,
-    zIndex: 99999,
+    left: 20,
+    right: 20,
+    zIndex: 999999,
     alignItems: 'center',
     gap: 8,
   },
-  toastCard: {
-    width: '100%',
-    borderRadius: 16,
+  toastPill: {
+    alignSelf: 'center',
+    maxWidth: '88%',
+    borderRadius: 999,
     borderWidth: 1,
     shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 10,
+    shadowRadius: 12,
     elevation: 8,
-    overflow: 'hidden',
   },
-  pressableContent: {
+  pillContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  iconWrapper: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+  },
+  icon: {
+    marginRight: 10,
   },
   textWrapper: {
-    flex: 1,
-    marginRight: 8,
+    justifyContent: 'center',
   },
   title: {
-    fontSize: 14,
-    fontFamily: 'Satoshi-Bold',
+    fontSize: 14.5,
+    fontFamily: 'PlusJakartaSans-SemiBold',
     letterSpacing: -0.2,
   },
   message: {
     fontSize: 12,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Regular',
     marginTop: 2,
-    lineHeight: 16,
+    lineHeight: 15,
   },
 });
 

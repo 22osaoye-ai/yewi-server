@@ -2,91 +2,127 @@ import { useEffect, useRef } from 'react';
 import { useAuth, useUser } from '@clerk/expo';
 import { useAuthStore } from '@/store/useAuthStore';
 import { authService } from '@/services/authService';
+import { UserProfile } from '@/domain/auth/auth.types';
+
+// Bloqueo y caché a nivel de módulo para evitar bucles de sincronización ante re-renders o hot-reloads
+let moduleLastSyncedId: string | null = null;
+let moduleIsSyncing = false;
+let moduleLastSyncTime = 0;
 
 export function ClerkAuthSync() {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const { user } = useUser();
   const wasSignedInWithClerk = useRef(false);
-  const isSyncing = useRef(false);
-  const lastSyncedId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!isLoaded) return;
 
     if (isSignedIn && user) {
-      if (isSyncing.current || lastSyncedId.current === user.id) return;
-      isSyncing.current = true;
+      const now = Date.now();
+      // Si ya se está sincronizando o se sincronizó hace menos de 30s para este usuario, no repetir
+      if (
+        moduleIsSyncing ||
+        (moduleLastSyncedId === user.id && now - moduleLastSyncTime < 30000)
+      ) {
+        return;
+      }
+
+      moduleIsSyncing = true;
+      moduleLastSyncedId = user.id;
+      moduleLastSyncTime = now;
       wasSignedInWithClerk.current = true;
 
       (async () => {
         try {
-          const email = user.primaryEmailAddress?.emailAddress || `${user.id}@clerk.user`;
-          const fullName =
+          const email =
+            user.primaryEmailAddress?.emailAddress ||
+            user.emailAddresses?.[0]?.emailAddress ||
+            `${user.id}@clerk.user`;
+
+          // Buscar cuenta externa de Google vinculada
+          const googleAccount = user.externalAccounts?.find(
+            (acc: any) => acc.provider === 'google' || acc.provider === 'oauth_google'
+          ) as any;
+
+          const firstName =
+            user.firstName ||
+            googleAccount?.firstName ||
+            '';
+
+          const lastName =
+            user.lastName ||
+            googleAccount?.lastName ||
+            '';
+
+          const resolvedFullName =
             user.fullName ||
-            `${user.firstName || ''} ${user.lastName || ''}`.trim() ||
-            'Usuario';
+            (firstName && lastName ? `${firstName} ${lastName}`.trim() : firstName || lastName) ||
+            user.username ||
+            googleAccount?.username ||
+            (email.includes('@') ? email.split('@')[0].replace(/[._-]+/g, ' ') : '');
+
           const token = await getToken().catch(() => null);
 
           let backendUser: any = null;
-          let accessToken: string | undefined = token || undefined;
+          let accessToken: string | undefined = undefined;
           let refreshToken: string | undefined = undefined;
 
           // Intentar sincronización con el backend NestJS
           try {
             const backendResult = await authService.loginWithGoogle({
               email,
-              name: fullName,
-              avatarUrl: user.imageUrl,
+              name: resolvedFullName,
+              avatarUrl: user.imageUrl || googleAccount?.avatarUrl,
               idToken: token || undefined,
             });
 
             if (backendResult?.user) {
               backendUser = backendResult.user;
-              accessToken = backendResult.accessToken || accessToken;
+              accessToken = backendResult.accessToken;
               refreshToken = backendResult.refreshToken;
             }
           } catch (syncError) {
-            console.warn('[ClerkAuthSync] Sincronización backend falló, usando perfil local de Clerk:', syncError);
+            console.warn(
+              '[ClerkAuthSync] Backend no disponible temporalmente (ej. arranque en Render):',
+              (syncError as any)?.message || syncError
+            );
           }
 
-          // Si el backend no respondió o falló, construir perfil seguro a partir de Clerk
-          if (!backendUser) {
-            const names = fullName.split(' ');
-            backendUser = {
+          if (backendUser && accessToken) {
+            await useAuthStore.getState().setAuth(
+              backendUser,
+              accessToken,
+              refreshToken
+            );
+            useAuthStore.getState().setNeedsProfileCompletion(false);
+          } else {
+            // Sesión autenticada en Clerk: configurar usuario real de Clerk sin token ficticio para evitar 401
+            const fallbackUser: UserProfile = {
               id: user.id,
               email,
-              firstName: user.firstName || names[0] || 'Usuario',
-              lastName: user.lastName || names.slice(1).join(' ') || '',
+              firstName: firstName || (resolvedFullName ? resolvedFullName.split(' ')[0] : 'Usuario'),
+              lastName: lastName || (resolvedFullName ? resolvedFullName.split(' ').slice(1).join(' ') : ''),
               roles: ['CLIENT'],
-              avatarUrl: user.imageUrl,
-              phoneNumber: user.primaryPhoneNumber?.phoneNumber,
+              avatarUrl: user.imageUrl || googleAccount?.avatarUrl,
             };
+            await useAuthStore.getState().setAuth(fallbackUser);
+            useAuthStore.getState().setNeedsProfileCompletion(false);
           }
-
-          await useAuthStore.getState().setAuth(
-            backendUser,
-            accessToken,
-            refreshToken
-          );
-          useAuthStore.getState().setNeedsProfileCompletion(false);
-          lastSyncedId.current = user.id;
         } catch (e) {
-          console.error('[ClerkAuthSync] Error crítico al sincronizar sesión:', e);
-          useAuthStore.setState({ isLoading: false });
+          console.error('[ClerkAuthSync] Error al procesar sesión:', e);
         } finally {
-          isSyncing.current = false;
+          moduleIsSyncing = false;
         }
       })();
     } else if (!isSignedIn && wasSignedInWithClerk.current) {
       wasSignedInWithClerk.current = false;
-      lastSyncedId.current = null;
+      moduleLastSyncedId = null;
+      moduleLastSyncTime = 0;
       if (useAuthStore.getState().isAuthenticated) {
-        useAuthStore.getState().logout();
+        useAuthStore.getState().logout().catch(() => {});
       }
-    } else {
-      useAuthStore.setState({ isLoading: false });
     }
-  }, [isLoaded, isSignedIn, user]);
+  }, [isLoaded, isSignedIn, user?.id]);
 
   return null;
 }

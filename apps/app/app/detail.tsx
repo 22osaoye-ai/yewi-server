@@ -667,12 +667,17 @@ export default function DetailScreen() {
       ]);
       return;
     }
+    const proId =
+      (entity as any)?.professionalProfile?.id ||
+      (entity as any)?.professionalProfileId ||
+      id;
+
     router.push({
       pathname: '/create-review',
       params: {
-        targetId: id,
+        targetId: proId,
         targetName: sellerName,
-        entityType: isResolvedGig ? 'gig' : 'professional',
+        entityType: 'professional',
         avatarUrl: sellerAvatar || '',
         category: category || '',
       },
@@ -1189,31 +1194,33 @@ export default function DetailScreen() {
                 </View>
               )}
 
-              {/* Top-Left Rating Pill overlay */}
-              <View
-                style={{
-                  position: 'absolute',
-                  top: 14,
-                  left: 14,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 4,
-                  paddingHorizontal: 11,
-                  paddingVertical: 6,
-                  borderRadius: 999,
-                  backgroundColor: '#FFFFFF',
-                  shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 2 },
-                  shadowOpacity: 0.12,
-                  shadowRadius: 4,
-                  elevation: 3,
-                }}
-              >
-                <Ionicons name="star" size={12.5} color="#F59E0B" />
-                <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Bold', color: '#0F172A' }}>
-                  {rating || '5.0'}
-                </Text>
-              </View>
+              {/* Top-Left Rating Pill overlay - Only for professionals, NOT for services */}
+              {!isResolvedGig && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    top: 14,
+                    left: 14,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    paddingHorizontal: 11,
+                    paddingVertical: 6,
+                    borderRadius: 999,
+                    backgroundColor: '#FFFFFF',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.12,
+                    shadowRadius: 4,
+                    elevation: 3,
+                  }}
+                >
+                  <Ionicons name="star" size={12.5} color="#F59E0B" />
+                  <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Bold', color: '#0F172A' }}>
+                    {rating || '5.0'}
+                  </Text>
+                </View>
+              )}
 
               {/* Bottom-Left Price Pill overlay */}
               <View
@@ -1318,14 +1325,11 @@ export default function DetailScreen() {
                   gap: 16,
                 }}
               >
-                {/* Rating */}
+                {/* Garantía Escrow */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Ionicons name="star" size={13} color="#F59E0B" />
-                  <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
-                    {rating || '4.9'}
-                  </Text>
-                  <Text style={{ fontSize: 11.5, fontFamily: 'PlusJakartaSans-Medium', color: colors.textMuted }}>
-                    ({reviewsCount || 42})
+                  <Ionicons name="shield-checkmark" size={14} color="#059669" />
+                  <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-SemiBold', color: colors.textPrimary }}>
+                    Garantía Escrow
                   </Text>
                 </View>
 
@@ -2200,12 +2204,12 @@ export default function DetailScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <View>
                 <Text style={{ fontSize: 17, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary, letterSpacing: -0.3 }}>
-                  Opiniones y Reseñas
+                  {isResolvedGig ? 'Opiniones del Profesional' : 'Opiniones y Reseñas'}
                 </Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
                   <Ionicons name="star" size={13} color="#F59E0B" />
                   <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans-Bold', color: '#D97706' }}>
-                    {rating || '4.9'} · {reviewsCount || 41} valoraciones
+                    {rating || '5.0'} · {reviewsCount || reviewsList.length} valoraciones
                   </Text>
                 </View>
               </View>
@@ -2311,50 +2315,51 @@ export default function DetailScreen() {
                       elevation: 2,
                     }}
                   >
-                    {/* Top Row: Reviewer Avatar + Name + Stars */}
+                    {/* Top Row: Reviewer Avatar + Name & Date (Image 4 clean structure) */}
                     <View
                       style={{
                         flexDirection: 'row',
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        marginBottom: 10,
+                        marginBottom: 8,
                       }}
                     >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, marginRight: 10 }}>
                         <View
                           style={{
-                            width: 38,
-                            height: 38,
-                            borderRadius: 19,
-                            backgroundColor: isDark ? 'rgba(2, 132, 199, 0.25)' : '#E0F2FE',
+                            width: 36,
+                            height: 36,
+                            borderRadius: 18,
+                            backgroundColor: isDark ? 'rgba(2, 132, 199, 0.2)' : '#E0F2FE',
                             alignItems: 'center',
                             justifyContent: 'center',
                           }}
                         >
-                          <Text style={{ fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: '#0284C7' }}>
+                          <Text style={{ fontSize: 14.5, fontFamily: 'PlusJakartaSans-Bold', color: '#0284C7' }}>
                             {authorName.charAt(0).toUpperCase()}
                           </Text>
                         </View>
-                        <View>
-                          <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans-Bold', color: isDark ? '#FFFFFF' : '#0F172A' }}>
+                        <View style={{ flex: 1 }}>
+                          <Text numberOfLines={1} style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans-Bold', color: isDark ? '#FFFFFF' : '#0F172A' }}>
                             {authorName}
                           </Text>
-                          <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans-Medium', color: isDark ? '#94A3B8' : '#64748B', marginTop: 1 }}>
-                            {revDate}
-                          </Text>
+                          <View style={{ flexDirection: 'row', gap: 2, marginTop: 2 }}>
+                            {[...Array(5)].map((_, i) => (
+                              <Ionicons
+                                key={i}
+                                name={i < revRating ? 'star' : 'star-outline'}
+                                size={12}
+                                color={i < revRating ? '#10B981' : (isDark ? '#52525B' : '#CBD5E1')}
+                              />
+                            ))}
+                          </View>
                         </View>
                       </View>
 
-                      <View style={{ flexDirection: 'row', gap: 2 }}>
-                        {[...Array(5)].map((_, i) => (
-                          <Ionicons
-                            key={i}
-                            name={i < revRating ? 'star' : 'star-outline'}
-                            size={13}
-                            color={i < revRating ? '#F59E0B' : (isDark ? '#52525B' : '#CBD5E1')}
-                          />
-                        ))}
-                      </View>
+                      {/* Review Date clearly separated on top right (Image 4) */}
+                      <Text style={{ fontSize: 11.5, fontFamily: 'PlusJakartaSans-Medium', color: isDark ? '#94A3B8' : '#64748B', flexShrink: 0 }}>
+                        {revDate}
+                      </Text>
                     </View>
 
                     {/* Review Comment */}
@@ -2363,63 +2368,82 @@ export default function DetailScreen() {
                         fontSize: 13,
                         fontFamily: 'PlusJakartaSans-Regular',
                         color: isDark ? '#E2E8F0' : '#334155',
-                        lineHeight: 19,
+                        lineHeight: 20,
+                        marginTop: 4,
                       }}
                     >
                       {rev.comment}
                     </Text>
 
-                    {/* Professional Reply Block (if present) */}
+                    {/* Professional Reply Block (Image 4 Clean Nested Card: No Blue Left Border, Pro Name on Left, Date on Right) */}
                     {Boolean(rev.sellerReply) && (
                       <View
                         style={{
                           marginTop: 12,
                           padding: 12,
                           borderRadius: 14,
-                          backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : '#F8FAFC',
-                          borderLeftWidth: 3,
-                          borderLeftColor: isDark ? '#38BDF8' : '#0284C7',
+                          backgroundColor: isDark ? '#181C26' : '#F8FAFC',
+                          borderWidth: 1,
+                          borderColor: isDark ? '#2D3548' : '#E2E8F0',
                         }}
                       >
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Ionicons name="arrow-undo-outline" size={13} color={isDark ? '#38BDF8' : '#0284C7'} />
-                            <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
-                              Respuesta de {sellerName}
-                            </Text>
-                          </View>
+                        <View
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            marginBottom: 4,
+                          }}
+                        >
+                          <Text
+                            numberOfLines={1}
+                            style={{
+                              fontSize: 12.5,
+                              fontFamily: 'PlusJakartaSans-Bold',
+                              color: colors.textPrimary,
+                              flex: 1,
+                              marginRight: 8,
+                            }}
+                          >
+                            {sellerName}
+                          </Text>
                           {Boolean(rev.sellerRepliedAt) && (
-                            <Text style={{ fontSize: 10.5, fontFamily: 'PlusJakartaSans-Medium', color: colors.textMuted }}>
+                            <Text
+                              style={{
+                                fontSize: 11,
+                                fontFamily: 'PlusJakartaSans-Medium',
+                                color: colors.textMuted,
+                                flexShrink: 0,
+                              }}
+                            >
                               {rev.sellerRepliedAt}
                             </Text>
                           )}
                         </View>
-                        <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, lineHeight: 18 }}>
+                        <Text
+                          style={{
+                            fontSize: 12.5,
+                            fontFamily: 'PlusJakartaSans-Regular',
+                            color: colors.textSecondary,
+                            lineHeight: 19,
+                          }}
+                        >
                           {rev.sellerReply}
                         </Text>
                       </View>
                     )}
 
-                    {/* Review Card Footer: Escrow Tag on Left, Responder Button on Right */}
-                    <View
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        marginTop: 12,
-                        paddingTop: 10,
-                        borderTopWidth: 1,
-                        borderTopColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.04)',
-                      }}
-                    >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                        <Ionicons name="shield-checkmark" size={12} color="#059669" />
-                        <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans-Bold', color: '#059669' }}>
-                          Pago Escrow
-                        </Text>
-                      </View>
-
-                      {!rev.sellerReply && (
+                    {/* Review Card Actions (Only Responder button when reply is missing; No Pago Escrow tag) */}
+                    {!rev.sellerReply && (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'flex-end',
+                          marginTop: 10,
+                          paddingTop: 8,
+                        }}
+                      >
                         <ThemedTouchable
                           onPress={() => {
                             Haptics.selectionAsync().catch(() => {});
@@ -2431,8 +2455,8 @@ export default function DetailScreen() {
                             flexDirection: 'row',
                             alignItems: 'center',
                             gap: 4,
-                            paddingHorizontal: 10,
-                            paddingVertical: 4.5,
+                            paddingHorizontal: 12,
+                            paddingVertical: 5,
                             borderRadius: 999,
                             backgroundColor: isDark ? '#27272A' : '#F1F5F9',
                           }}
@@ -2444,8 +2468,8 @@ export default function DetailScreen() {
                             Responder
                           </Text>
                         </ThemedTouchable>
-                      )}
-                    </View>
+                      </View>
+                    )}
                   </View>
                 );
               })}

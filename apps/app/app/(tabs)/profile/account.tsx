@@ -19,7 +19,7 @@ export default function AccountRoute() {
   return (
     <ProtectedRoute fallbackMessage="Inicia sesión para gestionar tus datos de cuenta y preferencias de perfil.">
       <AccountScreen
-        onBack={() => router.back()}
+        onBack={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/profile'))}
         onShowAlert={(title, message) =>
           setAlertConfig({ visible: true, title, message })
         }

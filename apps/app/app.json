@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "yewiapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "es.yewi.app",
@@ -20,7 +19,8 @@
         "NSCameraUsageDescription": "Yewi necesita acceso a la cámara para capturar fotos de averías, trabajos realizados y comprobantes de proyectos.",
         "NSPhotoLibraryUsageDescription": "Yewi necesita acceso a tu galería de fotos para adjuntar imágenes a solicitudes, proyectos y perfiles.",
         "NSLocationWhenInUseUsageDescription": "Yewi utiliza tu ubicación para encontrar y mostrarte profesionales y solicitudes cercanas en España.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Yewi utiliza tu ubicación para ofrecerte servicios en tu zona geográfica."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Yewi utiliza tu ubicación para ofrecerte servicios en tu zona geográfica.",
+        "NSFaceIDUsageDescription": "Yewi utiliza Face ID para proteger tu cuenta e iniciar sesión de forma rápida y segura."
       }
     },
     "android": {
@@ -28,6 +28,10 @@
       "versionCode": 1,
       "googleServicesFile": "./google-services.json",
       "softwareKeyboardLayoutMode": "resize",
+      "statusBar": {
+        "backgroundColor": "#00000000",
+        "translucent": true
+      },
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -38,7 +42,9 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "CAMERA",
-        "READ_MEDIA_IMAGES"
+        "READ_MEDIA_IMAGES",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
       ],
       "intentFilters": [
         {
@@ -50,10 +56,12 @@
               "host": "clerk.yewi.com"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -90,13 +98,23 @@
         "expo-notifications",
         {
           "icon": "./assets/images/icon.png",
-          "color": "#C87D20",
+          "color": "#0284C7",
           "defaultChannel": "default"
+        }
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-sharing",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Yewi utiliza Face ID para proteger tu cuenta e iniciar sesión de forma rápida y segura."
         }
       ]
     ],
     "experiments": {
-      "typedRoutes": true
+      "typedRoutes": true,
+      "reactCompiler": false
     }
   }
 }

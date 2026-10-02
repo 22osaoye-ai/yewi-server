@@ -17,6 +17,14 @@ export interface ThemeTokens {
   primaryLight: string;
   danger: string;
   dangerBg: string;
+  success: string;
+  successBg: string;
+  warning: string;
+  warningBg: string;
+  info: string;
+  infoBg: string;
+  accent: string;
+  accentBg: string;
 }
 
 export function useAppTheme() {
@@ -33,12 +41,20 @@ export function useAppTheme() {
         textPrimary: '#F4F4F5',
         textSecondary: '#A1A1AA',
         textMuted: '#71717A',
-        headerBg: '#18181B',
+        headerBg: '#121214',
         cardBg: '#1A1A1E',
-        primary: '#D98E28',
-        primaryLight: '#312312',
+        primary: '#38BDF8',
+        primaryLight: '#082F49',
         danger: '#EF4444',
         dangerBg: '#2E1515',
+        success: '#22C55E',
+        successBg: '#132B1B',
+        warning: '#F59E0B',
+        warningBg: '#2F210B',
+        info: '#38BDF8',
+        infoBg: '#0C2D48',
+        accent: '#0EA5E9',
+        accentBg: '#082F49',
       }
     : {
         isDark: false,
@@ -50,12 +66,20 @@ export function useAppTheme() {
         textPrimary: '#18181B',
         textSecondary: '#71717A',
         textMuted: '#9CA3AF',
-        headerBg: '#C87D20',
+        headerBg: '#F8F8FA',
         cardBg: '#FFFFFF',
-        primary: '#C87D20',
-        primaryLight: '#FEF3C7',
+        primary: '#0284C7',
+        primaryLight: '#E0F2FE',
         danger: '#DC2626',
         dangerBg: '#FEE2E2',
+        success: '#16A34A',
+        successBg: '#DCFCE7',
+        warning: '#D97706',
+        warningBg: '#FEF3C7',
+        info: '#0284C7',
+        infoBg: '#EFF6FF',
+        accent: '#0EA5E9',
+        accentBg: '#F0F9FF',
       };
 
   const t = getTranslation(language);

@@ -7,7 +7,7 @@ interface FavoritesState {
 }
 
 export const useFavoritesStore = create<FavoritesState>((set, get) => ({
-  favorites: ['1'], // Default pre-favorited item
+  favorites: ['gig-1', 'gig-3', '1'], // Default pre-favorited items
   toggleFavorite: (productId: string) => {
     set((state) => {
       const exists = state.favorites.includes(productId);

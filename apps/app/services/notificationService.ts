@@ -41,7 +41,7 @@ export const notificationService = {
           name: 'Notificaciones Yewi',
           importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#C87D20',
+          lightColor: '#0284C7',
           sound: 'default',
           enableVibrate: true,
           showBadge: true,
@@ -51,7 +51,7 @@ export const notificationService = {
           name: 'Pedidos y Presupuestos',
           importance: Notifications.AndroidImportance.HIGH,
           vibrationPattern: [0, 300, 150, 300],
-          lightColor: '#C87D20',
+          lightColor: '#0284C7',
           sound: 'default',
         });
       }
@@ -126,7 +126,7 @@ export const notificationService = {
           body: params.body,
           data: params.data || {},
           sound: 'default',
-          color: '#C87D20',
+          color: '#0284C7',
         },
         trigger: null,
       });
@@ -155,7 +155,7 @@ export const notificationService = {
           body: params.body,
           data: params.data || {},
           sound: 'default',
-          color: '#C87D20',
+          color: '#0284C7',
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
@@ -227,7 +227,7 @@ export const notificationService = {
       }
 
       if (link === '/vouchers') {
-        router.push('/vouchers');
+        router.push('/(tabs)/requests');
         return;
       }
 

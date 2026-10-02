@@ -11,7 +11,6 @@ export default function ProfileLayout() {
       <Stack.Screen name="index" />
       <Stack.Screen name="account" />
       <Stack.Screen name="preferences" />
-      <Stack.Screen name="interests" />
       <Stack.Screen name="support" />
       <Stack.Screen name="legal" />
       <Stack.Screen name="professional" />

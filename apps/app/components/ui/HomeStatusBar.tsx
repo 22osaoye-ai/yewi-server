@@ -4,7 +4,6 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedTouchable } from './ThemedTouchable';
 import { useAppTheme } from '@/hooks/useAppTheme';
-import { useAuthStore } from '@/store/useAuthStore';
 import { useSeenStatusesStore } from '@/store/useSeenStatusesStore';
 import { AuthorStatusFeedGroup } from '@/services/statusesApi';
 
@@ -12,21 +11,20 @@ interface HomeStatusBarProps {
   stories: AuthorStatusFeedGroup[];
   loading?: boolean;
   onSelectStory: (group: AuthorStatusFeedGroup) => void;
-  onAddStoryPress: () => void;
 }
 
 export function HomeStatusBar({
   stories,
   loading = false,
   onSelectStory,
-  onAddStoryPress,
 }: HomeStatusBarProps) {
   const { colors, isDark } = useAppTheme();
-  const { user } = useAuthStore();
   const isGroupSeen = useSeenStatusesStore((state) => state.isGroupSeen);
 
-  const isCurrentUserPro = Boolean(user?.isPro || (user as any)?.professionalProfile?.isPro);
-  const myAvatar = user?.avatarUrl;
+  // Si no hay estados disponibles para ver, no renderizar barra vacía
+  if (stories.length === 0) {
+    return null;
+  }
 
   return (
     <View style={styles.container}>
@@ -35,62 +33,6 @@ export function HomeStatusBar({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Tu Estado (Crear o Ver si es Pro) */}
-        <View style={styles.storyItemContainer}>
-          <ThemedTouchable
-            onPress={onAddStoryPress}
-            haptic="medium"
-            style={styles.avatarWrapper}
-          >
-            <View
-              style={[
-                styles.avatarCircle,
-                {
-                  borderColor: isDark ? '#27272A' : '#E4E4E7',
-                  backgroundColor: isDark ? '#1F2432' : '#F1F5F9',
-                },
-              ]}
-            >
-              {myAvatar ? (
-                <Image
-                  source={{ uri: myAvatar }}
-                  style={styles.avatarImage}
-                  contentFit="cover"
-                />
-              ) : (
-                <View
-                  style={[
-                    styles.avatarPlaceholder,
-                    { backgroundColor: colors.primaryLight },
-                  ]}
-                >
-                  <Ionicons name="person" size={24} color={colors.primary} />
-                </View>
-              )}
-            </View>
-
-            {/* Plus Icon Badge */}
-            <View
-              style={[
-                styles.plusBadge,
-                {
-                  backgroundColor: colors.primary,
-                  borderColor: isDark ? '#0D0E12' : '#F8FAFC',
-                },
-              ]}
-            >
-              <Ionicons name="add" size={13} color="#FFFFFF" />
-            </View>
-          </ThemedTouchable>
-
-          <Text
-            numberOfLines={1}
-            style={[styles.storyLabel, { color: colors.textPrimary }]}
-          >
-            Tu estado
-          </Text>
-        </View>
-
         {/* Historias de Profesionales / Sellers */}
         {stories.map((group) => {
           const hasStories = group.statuses && group.statuses.length > 0;
@@ -200,38 +142,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginBottom: 5,
   },
-  avatarCircle: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    borderWidth: 1.5,
-    padding: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-  },
-  avatarPlaceholder: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  plusBadge: {
-    position: 'absolute',
-    bottom: -1,
-    right: -1,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   storyRing: {
     width: 62,
     height: 62,
@@ -261,7 +171,7 @@ const styles = StyleSheet.create({
   },
   sellerInitial: {
     fontSize: 18,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
   },
   proBadge: {
     position: 'absolute',
@@ -276,7 +186,7 @@ const styles = StyleSheet.create({
   },
   storyLabel: {
     fontSize: 11.5,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans-Medium',
     textAlign: 'center',
     width: '100%',
   },

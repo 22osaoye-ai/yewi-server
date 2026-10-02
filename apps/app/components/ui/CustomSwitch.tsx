@@ -1,8 +1,15 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Pressable, ViewStyle, StyleSheet } from 'react-native';
+import React, { useEffect } from 'react';
+import { Pressable, ViewStyle, StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  interpolateColor,
+} from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
-interface CustomSwitchProps {
+export interface CustomSwitchProps {
   value: boolean;
   onValueChange: (value: boolean) => void;
   activeColor?: string;
@@ -14,19 +21,24 @@ interface CustomSwitchProps {
 export function CustomSwitch({
   value,
   onValueChange,
-  activeColor = '#34C759', // Authentic iOS Green
-  inactiveColor = '#E9E9EA', // Authentic iOS Light Gray
+  activeColor,
+  inactiveColor,
+  style,
   disabled = false,
 }: CustomSwitchProps) {
-  const animValue = useRef(new Animated.Value(value ? 1 : 0)).current;
+  const { colors, isDark } = useAppTheme();
+
+  const progress = useSharedValue(value ? 1 : 0);
+
+  const resolvedActive = activeColor || colors.primary;
+  const resolvedInactive = inactiveColor || (isDark ? '#2E2E34' : '#E4E4E7');
 
   useEffect(() => {
-    Animated.spring(animValue, {
-      toValue: value ? 1 : 0,
-      useNativeDriver: false,
-      bounciness: 3,
-      speed: 16,
-    }).start();
+    progress.value = withSpring(value ? 1 : 0, {
+      damping: 18,
+      stiffness: 280,
+      mass: 0.5,
+    });
   }, [value]);
 
   const handlePress = () => {
@@ -35,27 +47,34 @@ export function CustomSwitch({
     onValueChange(!value);
   };
 
-  const backgroundColor = animValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: [inactiveColor, activeColor],
+  const trackAnimatedStyle = useAnimatedStyle(() => {
+    const backgroundColor = interpolateColor(
+      progress.value,
+      [0, 1],
+      [resolvedInactive, resolvedActive]
+    );
+    return {
+      backgroundColor,
+    };
   });
 
-  const translateX = animValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: [2, 22],
+  const thumbAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: progress.value * 20 }],
+    };
   });
 
   return (
-    <Pressable onPress={handlePress} disabled={disabled}>
-      <Animated.View style={[styles.container, { backgroundColor }]}>
-        <Animated.View
-          style={[
-            styles.thumb,
-            {
-              transform: [{ translateX }],
-            },
-          ]}
-        />
+    <Pressable
+      onPress={handlePress}
+      disabled={disabled}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      style={[{ opacity: disabled ? 0.45 : 1 }, style]}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value, disabled }}
+    >
+      <Animated.View style={[styles.container, trackAnimatedStyle]}>
+        <Animated.View style={[styles.thumb, thumbAnimatedStyle]} />
       </Animated.View>
     </Pressable>
   );
@@ -63,21 +82,22 @@ export function CustomSwitch({
 
 const styles = StyleSheet.create({
   container: {
-    width: 51,
-    height: 31,
-    borderRadius: 16.5,
+    width: 48,
+    height: 28,
+    borderRadius: 14,
     justifyContent: 'center',
+    paddingHorizontal: 2.5,
   },
   thumb: {
-    width: 27,
-    height: 27,
-    borderRadius: 13.5,
+    width: 23,
+    height: 23,
+    borderRadius: 11.5,
     backgroundColor: '#FFFFFF',
-    elevation: 4,
+    elevation: 3,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
+    shadowOpacity: 0.18,
+    shadowRadius: 2.5,
   },
 });
 

@@ -292,7 +292,7 @@ export default function CompleteProfileScreen() {
                 );
               })}
             </View>
-            <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Bold', color: colors.textSecondary }}>
+            <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.textSecondary }}>
               Paso {step} de {totalSteps}
             </Text>
           </View>
@@ -303,7 +303,7 @@ export default function CompleteProfileScreen() {
               <Text
                 style={{
                   fontSize: 24,
-                  fontFamily: 'Satoshi-Black',
+                  fontFamily: 'PlusJakartaSans-ExtraBold',
                   color: colors.textPrimary,
                   letterSpacing: -0.5,
                   marginBottom: 6,
@@ -314,7 +314,7 @@ export default function CompleteProfileScreen() {
               <Text
                 style={{
                   fontSize: 13.5,
-                  fontFamily: 'Satoshi-Regular',
+                  fontFamily: 'PlusJakartaSans-Regular',
                   color: colors.textSecondary,
                   marginBottom: 24,
                 }}
@@ -331,7 +331,7 @@ export default function CompleteProfileScreen() {
               <Text
                 style={{
                   fontSize: 24,
-                  fontFamily: 'Satoshi-Black',
+                  fontFamily: 'PlusJakartaSans-ExtraBold',
                   color: colors.textPrimary,
                   letterSpacing: -0.5,
                   marginBottom: 6,
@@ -342,7 +342,7 @@ export default function CompleteProfileScreen() {
               <Text
                 style={{
                   fontSize: 13.5,
-                  fontFamily: 'Satoshi-Regular',
+                  fontFamily: 'PlusJakartaSans-Regular',
                   color: colors.textSecondary,
                   marginBottom: 20,
                 }}
@@ -395,7 +395,7 @@ export default function CompleteProfileScreen() {
                 <Text
                   style={{
                     fontSize: 24,
-                    fontFamily: 'Satoshi-Black',
+                    fontFamily: 'PlusJakartaSans-ExtraBold',
                     color: colors.textPrimary,
                     letterSpacing: -0.5,
                   }}
@@ -422,7 +422,7 @@ export default function CompleteProfileScreen() {
                   ) : (
                     <Ionicons name="navigate-outline" size={13} color={colors.primary} style={{ marginRight: 4 }} />
                   )}
-                  <Text style={{ fontSize: 11.5, fontFamily: 'Satoshi-Bold', color: colors.primary }}>
+                  <Text style={{ fontSize: 11.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.primary }}>
                     {isDetectingLocation ? 'Detectando...' : 'Usar GPS'}
                   </Text>
                 </ThemedTouchable>
@@ -431,7 +431,7 @@ export default function CompleteProfileScreen() {
               <Text
                 style={{
                   fontSize: 13.5,
-                  fontFamily: 'Satoshi-Regular',
+                  fontFamily: 'PlusJakartaSans-Regular',
                   color: colors.textSecondary,
                   marginBottom: 12,
                 }}
@@ -502,7 +502,7 @@ export default function CompleteProfileScreen() {
               <Text
                 style={{
                   fontSize: 24,
-                  fontFamily: 'Satoshi-Black',
+                  fontFamily: 'PlusJakartaSans-ExtraBold',
                   color: colors.textPrimary,
                   letterSpacing: -0.5,
                   marginBottom: 6,
@@ -513,7 +513,7 @@ export default function CompleteProfileScreen() {
               <Text
                 style={{
                   fontSize: 13.5,
-                  fontFamily: 'Satoshi-Regular',
+                  fontFamily: 'PlusJakartaSans-Regular',
                   color: colors.textSecondary,
                   marginBottom: 16,
                 }}
@@ -561,7 +561,7 @@ export default function CompleteProfileScreen() {
                   justifyContent: 'center',
                 }}
               >
-                <Text style={{ fontSize: 15, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+                <Text style={{ fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
                   Atrás
                 </Text>
               </ThemedTouchable>

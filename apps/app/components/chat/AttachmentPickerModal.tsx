@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { ThemedTouchable } from '@/components/ui/ThemedTouchable';
+import { AppBottomSheet } from '@/components/ui/AppBottomSheet';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { AttachmentMeta } from '@/services/chatApi';
 import { toast } from '@/store/useToastStore';
@@ -151,148 +152,125 @@ export function AttachmentPickerModal({
     }
   };
 
+  const iconColor = isDark ? '#F9FAFB' : '#111827';
+
   return (
-    <Modal
+    <AppBottomSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
+      onClose={onClose}
+      title="Adjuntar archivo"
     >
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable
-          style={[
-            styles.sheetContainer,
-            {
-              backgroundColor: isDark ? '#161922' : '#FFFFFF',
-              borderColor: isDark ? '#2D3548' : '#E2E8F0',
-            },
-          ]}
-          onPress={(e) => e.stopPropagation()}
+      <View style={styles.optionsList}>
+        {/* Camera */}
+        <ThemedTouchable
+          onPress={() => {
+            onClose();
+            setTimeout(() => {
+              handlePickCamera();
+            }, 180);
+          }}
+          haptic="selection"
+          style={styles.optionRow}
+          accessibilityRole="button"
+          accessibilityLabel="Tomar foto con la cámara"
         >
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={[styles.title, { color: colors.textPrimary }]}>
-              Adjuntar Archivo
-            </Text>
-            <ThemedTouchable onPress={onClose} haptic="light">
-              <Ionicons name="close" size={22} color={colors.textSecondary} />
-            </ThemedTouchable>
-          </View>
+          <Ionicons
+            name="camera-outline"
+            size={24}
+            color={iconColor}
+            style={styles.optionIcon}
+          />
+          <Text
+            style={[
+              styles.optionLabel,
+              { color: isDark ? '#F9FAFB' : '#111827' },
+            ]}
+          >
+            Tomar foto con la cámara
+          </Text>
+        </ThemedTouchable>
 
-          {/* Options Grid */}
-          <View style={styles.optionsGrid}>
-            {/* Camera */}
-            <ThemedTouchable
-              onPress={handlePickCamera}
-              haptic="medium"
-              style={[
-                styles.optionCard,
-                {
-                  backgroundColor: isDark ? '#1F2432' : '#F8FAFC',
-                  borderColor: isDark ? '#2B3245' : '#E2E8F0',
-                },
-              ]}
-            >
-              <View style={[styles.iconCircle, { backgroundColor: '#3B82F6' }]}>
-                <Ionicons name="camera" size={22} color="#FFFFFF" />
-              </View>
-              <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
-                Cámara
-              </Text>
-            </ThemedTouchable>
+        {/* Gallery */}
+        <ThemedTouchable
+          onPress={() => {
+            onClose();
+            setTimeout(() => {
+              handlePickGallery();
+            }, 180);
+          }}
+          haptic="selection"
+          style={styles.optionRow}
+          accessibilityRole="button"
+          accessibilityLabel="Elegir de la galería"
+        >
+          <Ionicons
+            name="images-outline"
+            size={24}
+            color={iconColor}
+            style={styles.optionIcon}
+          />
+          <Text
+            style={[
+              styles.optionLabel,
+              { color: isDark ? '#F9FAFB' : '#111827' },
+            ]}
+          >
+            Elegir de la galería
+          </Text>
+        </ThemedTouchable>
 
-            {/* Gallery */}
-            <ThemedTouchable
-              onPress={handlePickGallery}
-              haptic="medium"
-              style={[
-                styles.optionCard,
-                {
-                  backgroundColor: isDark ? '#1F2432' : '#F8FAFC',
-                  borderColor: isDark ? '#2B3245' : '#E2E8F0',
-                },
-              ]}
-            >
-              <View style={[styles.iconCircle, { backgroundColor: '#8B5CF6' }]}>
-                <Ionicons name="images" size={22} color="#FFFFFF" />
-              </View>
-              <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
-                Galería
-              </Text>
-            </ThemedTouchable>
-
-            {/* Documents */}
-            <ThemedTouchable
-              onPress={handlePickDocument}
-              haptic="medium"
-              style={[
-                styles.optionCard,
-                {
-                  backgroundColor: isDark ? '#1F2432' : '#F8FAFC',
-                  borderColor: isDark ? '#2B3245' : '#E2E8F0',
-                },
-              ]}
-            >
-              <View style={[styles.iconCircle, { backgroundColor: '#10B981' }]}>
-                <MaterialCommunityIcons name="file-document-multiple" size={22} color="#FFFFFF" />
-              </View>
-              <Text style={[styles.optionLabel, { color: colors.textPrimary }]}>
-                Documento
-              </Text>
-            </ThemedTouchable>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        {/* Documents */}
+        <ThemedTouchable
+          onPress={() => {
+            onClose();
+            setTimeout(() => {
+              handlePickDocument();
+            }, 180);
+          }}
+          haptic="selection"
+          style={styles.optionRow}
+          accessibilityRole="button"
+          accessibilityLabel="Adjuntar documento"
+        >
+          <Ionicons
+            name="document-text-outline"
+            size={24}
+            color={iconColor}
+            style={styles.optionIcon}
+          />
+          <Text
+            style={[
+              styles.optionLabel,
+              { color: isDark ? '#F9FAFB' : '#111827' },
+            ]}
+          >
+            Adjuntar documento
+          </Text>
+        </ThemedTouchable>
+      </View>
+    </AppBottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
+  optionsList: {
+    gap: 4,
+    paddingTop: 4,
   },
-  sheetContainer: {
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    borderTopWidth: 1,
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 36,
-  },
-  header: {
+  optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 4,
   },
-  title: {
-    fontSize: 16,
-    fontFamily: 'Satoshi-Bold',
-  },
-  optionsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    gap: 12,
-  },
-  optionCard: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 8,
-  },
-  iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
+  optionIcon: {
+    marginRight: 16,
+    width: 26,
+    textAlign: 'center',
   },
   optionLabel: {
-    fontSize: 13,
-    fontFamily: 'Satoshi-Bold',
+    fontSize: 16.5,
+    fontFamily: 'PlusJakartaSans-Bold',
+    letterSpacing: -0.2,
   },
 });

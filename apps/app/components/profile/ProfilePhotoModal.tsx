@@ -1,8 +1,11 @@
 import React from 'react';
-import { View, Text, Modal, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { AppBottomSheet } from '@/components/ui/AppBottomSheet';
 import { ThemedTouchable } from '@/components/ui/ThemedTouchable';
 import { CustomSwitch } from '@/components/ui/CustomSwitch';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 interface ProfilePhotoModalProps {
   visible: boolean;
@@ -25,183 +28,162 @@ export function ProfilePhotoModal({
   onTakePhoto,
   onRemovePhoto,
 }: ProfilePhotoModalProps) {
+  const { colors, isDark } = useAppTheme();
+
+  const handleAction = (callback: () => void) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    onClose();
+    setTimeout(() => {
+      callback();
+    }, 180);
+  };
+
+  const iconColor = isDark ? '#F9FAFB' : '#111827';
+
   return (
-    <Modal
+    <AppBottomSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
+      onClose={onClose}
+      title="Foto"
     >
-      <Pressable
-        style={{
-          flex: 1,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          justifyContent: 'flex-end',
-        }}
-        onPress={onClose}
-      >
-        <Pressable
-          style={{
-            backgroundColor: '#18181B',
-            borderTopLeftRadius: 32,
-            borderTopRightRadius: 32,
-            padding: 24,
-            paddingBottom: 40,
-          }}
-          onPress={(e) => e.stopPropagation()}
+      <View style={styles.optionsList}>
+        {/* Option 1: Gallery */}
+        <ThemedTouchable
+          onPress={() => handleAction(onSelectFromGallery)}
+          haptic="selection"
+          style={styles.optionRow}
+          accessibilityRole="button"
+          accessibilityLabel="Galería"
         >
-          {/* Handle Bar */}
-          <View
-            style={{
-              width: 48,
-              height: 4,
-              borderRadius: 2,
-              backgroundColor: 'rgba(255,255,255,0.2)',
-              alignSelf: 'center',
-              marginBottom: 20,
-            }}
+          <Ionicons
+            name="images-outline"
+            size={24}
+            color={iconColor}
+            style={styles.optionIcon}
           />
-
           <Text
-            style={{
-              fontSize: 18,
-              fontFamily: 'Satoshi-Black',
-              color: '#FFFFFF',
-              marginBottom: 16,
-              textAlign: 'center',
-            }}
+            numberOfLines={1}
+            style={[
+              styles.optionLabel,
+              { color: isDark ? '#F9FAFB' : '#111827' },
+            ]}
           >
-            Foto de Perfil y Estado
+            Galería
           </Text>
+        </ThemedTouchable>
 
-          {/* Option 1: Gallery */}
+        {/* Option 2: Camera */}
+        <ThemedTouchable
+          onPress={() => handleAction(onTakePhoto)}
+          haptic="selection"
+          style={styles.optionRow}
+          accessibilityRole="button"
+          accessibilityLabel="Cámara"
+        >
+          <Ionicons
+            name="camera-outline"
+            size={24}
+            color={iconColor}
+            style={styles.optionIcon}
+          />
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.optionLabel,
+              { color: isDark ? '#F9FAFB' : '#111827' },
+            ]}
+          >
+            Cámara
+          </Text>
+        </ThemedTouchable>
+
+        {/* Option 3: Remove Photo (if has photo) */}
+        {hasPhoto && onRemovePhoto && (
           <ThemedTouchable
-            onPress={onSelectFromGallery}
-            haptic="selection"
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingVertical: 14,
-              borderBottomWidth: 1,
-              borderBottomColor: 'rgba(255,255,255,0.08)',
-            }}
+            onPress={() => handleAction(onRemovePhoto)}
+            haptic="medium"
+            style={styles.optionRow}
+            accessibilityRole="button"
+            accessibilityLabel="Eliminar"
           >
             <Ionicons
-              name="images-outline"
-              size={22}
-              color="#C87D20"
-              style={{ marginRight: 16 }}
+              name="trash-outline"
+              size={24}
+              color="#DC2626"
+              style={styles.optionIcon}
             />
-            <Text
-              style={{
-                fontSize: 15.5,
-                fontFamily: 'Satoshi-Bold',
-                color: '#FFFFFF',
-                flex: 1,
-              }}
-            >
-              Elegir de la galería
+            <Text numberOfLines={1} style={[styles.optionLabel, { color: '#DC2626' }]}>
+              Eliminar
             </Text>
           </ThemedTouchable>
+        )}
 
-          {/* Option 2: Camera */}
-          <ThemedTouchable
-            onPress={onTakePhoto}
-            haptic="selection"
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingVertical: 14,
-              borderBottomWidth: 1,
-              borderBottomColor: 'rgba(255,255,255,0.08)',
-            }}
-          >
+        {/* Option 4: Online Status Switch Toggle */}
+        <View style={styles.switchRow}>
+          <View style={styles.switchLabelWrap}>
             <Ionicons
-              name="camera-outline"
+              name="radio-button-on"
               size={22}
-              color="#C87D20"
-              style={{ marginRight: 16 }}
+              color={isOnline ? '#10B981' : isDark ? '#6B7280' : '#9CA3AF'}
+              style={styles.optionIcon}
             />
             <Text
-              style={{
-                fontSize: 15.5,
-                fontFamily: 'Satoshi-Bold',
-                color: '#FFFFFF',
-                flex: 1,
-              }}
+              numberOfLines={1}
+              style={[
+                styles.optionLabel,
+                { color: isDark ? '#F9FAFB' : '#111827' },
+              ]}
             >
-              Tomar foto con la cámara
+              En línea
             </Text>
-          </ThemedTouchable>
-
-          {/* Option 3: Remove Photo (if exists) */}
-          {hasPhoto && onRemovePhoto && (
-            <ThemedTouchable
-              onPress={onRemovePhoto}
-              haptic="medium"
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                paddingVertical: 14,
-                borderBottomWidth: 1,
-                borderBottomColor: 'rgba(255,255,255,0.08)',
-              }}
-            >
-              <Ionicons
-                name="trash-outline"
-                size={22}
-                color="#EF4444"
-                style={{ marginRight: 16 }}
-              />
-              <Text
-                style={{
-                  fontSize: 15.5,
-                  fontFamily: 'Satoshi-Bold',
-                  color: '#EF4444',
-                  flex: 1,
-                }}
-              >
-                Eliminar foto actual
-              </Text>
-            </ThemedTouchable>
-          )}
-
-          {/* Option 4: Online Status Switch Toggle */}
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingVertical: 14,
-            }}
-          >
-            <View className="flex-row items-center flex-1 mr-3">
-              <Ionicons
-                name="radio-button-on"
-                size={22}
-                color={isOnline ? '#10B981' : '#9CA3AF'}
-                style={{ marginRight: 16 }}
-              />
-              <Text
-                style={{
-                  fontSize: 15.5,
-                  fontFamily: 'Satoshi-Bold',
-                  color: '#FFFFFF',
-                }}
-              >
-                Estado en línea
-              </Text>
-            </View>
-            <CustomSwitch
-              value={isOnline}
-              onValueChange={onToggleOnline}
-              activeColor="#10B981"
-            />
           </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+          <CustomSwitch
+            value={isOnline}
+            onValueChange={(val) => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              onToggleOnline(val);
+            }}
+            activeColor="#10B981"
+          />
+        </View>
+      </View>
+    </AppBottomSheet>
   );
 }
+
+const styles = StyleSheet.create({
+  optionsList: {
+    gap: 4,
+    paddingTop: 4,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  optionIcon: {
+    marginRight: 16,
+    width: 26,
+    textAlign: 'center',
+  },
+  optionLabel: {
+    fontSize: 16.5,
+    fontFamily: 'PlusJakartaSans-Bold',
+    letterSpacing: -0.2,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 4,
+  },
+  switchLabelWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+});
 
 export default ProfilePhotoModal;

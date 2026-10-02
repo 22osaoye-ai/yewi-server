@@ -184,13 +184,15 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
       {/* Header */}
       <View
         style={{
-          backgroundColor: colors.headerBg,
+          backgroundColor: colors.background,
           paddingTop: Math.max(insets.top + 8, 28),
           paddingBottom: 16,
           paddingHorizontal: 18,
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
+          borderBottomWidth: 1,
+          borderBottomColor: colors.borderSubtle,
         }}
       >
         <View className="flex-row items-center">
@@ -198,22 +200,25 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
             onPress={onBack}
             haptic="light"
             style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              backgroundColor: isDark ? '#27272A' : 'rgba(255, 255, 255, 0.2)',
+              width: 46,
+              height: 46,
+              borderRadius: 23,
+              backgroundColor: colors.surface,
               alignItems: 'center',
               justifyContent: 'center',
               marginRight: 14,
+              borderWidth: 1,
+              borderColor: colors.borderSubtle,
             }}
           >
-            <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
+            <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
           </ThemedTouchable>
           <Text
+            numberOfLines={1}
             style={{
               fontSize: 20,
-              fontFamily: 'Satoshi-Black',
-              color: '#FFFFFF',
+              fontFamily: 'PlusJakartaSans-ExtraBold',
+              color: colors.textPrimary,
               letterSpacing: -0.4,
             }}
           >
@@ -225,13 +230,15 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
           onPress={openEditModal}
           haptic="selection"
           style={{
-            paddingHorizontal: 14,
-            paddingVertical: 6,
-            backgroundColor: isDark ? '#27272A' : 'rgba(255, 255, 255, 0.25)',
-            borderRadius: 20,
+            paddingHorizontal: 16,
+            paddingVertical: 7,
+            backgroundColor: colors.surface,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: colors.borderSubtle,
           }}
         >
-          <Text style={{ color: '#FFFFFF', fontFamily: 'Satoshi-Bold', fontSize: 13 }}>
+          <Text style={{ color: colors.textPrimary, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 }}>
             Editar
           </Text>
         </ThemedTouchable>
@@ -247,16 +254,17 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
       >
         {/* Section 1: Personal Info */}
         <Text
+          numberOfLines={1}
           style={{
             fontSize: 17,
-            fontFamily: 'Satoshi-Black',
+            fontFamily: 'PlusJakartaSans-ExtraBold',
             color: colors.textPrimary,
             marginBottom: 10,
             marginLeft: 4,
             letterSpacing: -0.3,
           }}
         >
-          Datos de Contacto
+          Contacto
         </Text>
         <View
           style={{
@@ -282,55 +290,56 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
               isOnline={true}
             />
             <View style={{ marginLeft: 14, flex: 1 }}>
-              <Text style={{ fontSize: 16, fontFamily: 'Satoshi-Black', color: colors.textPrimary }}>
+              <Text numberOfLines={1} style={{ fontSize: 16, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary }}>
                 {user?.firstName ? `${user.firstName} ${user.lastName || ''}`.trim() : 'Usuario Yewi'}
               </Text>
-              <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginTop: 1 }}>
-                Foto de perfil
+              <Text numberOfLines={1} style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, marginTop: 1 }}>
+                Foto
               </Text>
             </View>
           </View>
 
           <View style={{ paddingVertical: 14, paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
-            <Text style={{ fontSize: 15, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+            <Text numberOfLines={1} style={{ fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
               {user?.email || 'Sin correo asociado'}
             </Text>
-            <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginTop: 2 }}>
-              Correo electrónico
+            <Text numberOfLines={1} style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, marginTop: 2 }}>
+              Correo
             </Text>
           </View>
 
           <View style={{ paddingVertical: 14, paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
-            <Text style={{ fontSize: 15, fontFamily: 'Satoshi-Bold', color: user?.phoneNumber ? colors.textPrimary : colors.danger }}>
+            <Text numberOfLines={1} style={{ fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: user?.phoneNumber ? colors.textPrimary : colors.danger }}>
               {user?.phoneNumber && !user.phoneNumber.includes('@') ? user.phoneNumber : 'No configurado'}
             </Text>
-            <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginTop: 2 }}>
-              Teléfono de contacto
+            <Text numberOfLines={1} style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, marginTop: 2 }}>
+              Teléfono
             </Text>
           </View>
 
           <View style={{ paddingVertical: 14, paddingHorizontal: 18 }}>
-            <Text style={{ fontSize: 15, fontFamily: 'Satoshi-Bold', color: colors.primary }}>
+            <Text numberOfLines={1} style={{ fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: colors.primary }}>
               {user?.roles?.includes('PROFESSIONAL') ? 'Profesional' : 'Cliente'}
             </Text>
-            <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginTop: 2 }}>
-              Tipo de cuenta
+            <Text numberOfLines={1} style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, marginTop: 2 }}>
+              Cuenta
             </Text>
           </View>
         </View>
 
         {/* Section 2: Location Information */}
         <Text
+          numberOfLines={1}
           style={{
             fontSize: 17,
-            fontFamily: 'Satoshi-Black',
+            fontFamily: 'PlusJakartaSans-ExtraBold',
             color: colors.textPrimary,
             marginBottom: 10,
             marginLeft: 4,
             letterSpacing: -0.3,
           }}
         >
-          Ubicación Principal
+          Ubicación
         </Text>
         <View
           style={{
@@ -348,29 +357,29 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
           }}
         >
           <View style={{ paddingVertical: 14, paddingHorizontal: 18, borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
-            <Text style={{ fontSize: 15, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+            <Text numberOfLines={1} style={{ fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
               {user?.region || 'Aragón'} · {user?.province || 'Zaragoza'}
             </Text>
-            <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginTop: 2 }}>
-              Comunidad Autónoma y Provincia
+            <Text numberOfLines={1} style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, marginTop: 2 }}>
+              Provincia
             </Text>
           </View>
 
           <View style={{ paddingVertical: 14, paddingHorizontal: 18, borderBottomWidth: user?.address ? 1 : 0, borderBottomColor: colors.borderSubtle }}>
-            <Text style={{ fontSize: 15, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+            <Text numberOfLines={1} style={{ fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
               {user?.city || 'Zaragoza'} ({user?.postalCode || '50001'})
             </Text>
-            <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginTop: 2 }}>
-              Localidad y Código Postal
+            <Text numberOfLines={1} style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, marginTop: 2 }}>
+              Localidad
             </Text>
           </View>
 
           {user?.address ? (
             <View style={{ paddingVertical: 14, paddingHorizontal: 18 }}>
-              <Text style={{ fontSize: 15, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+              <Text numberOfLines={1} style={{ fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
                 {user.address}
               </Text>
-              <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginTop: 2 }}>
+              <Text numberOfLines={1} style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, marginTop: 2 }}>
                 Dirección
               </Text>
             </View>
@@ -381,9 +390,14 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
         <View
           style={{
             backgroundColor: colors.surface,
-            borderRadius: 50,
-            borderWidth: isDark ? 1 : 0,
+            borderRadius: 20,
+            borderWidth: 1,
             borderColor: colors.border,
+            elevation: 2,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: isDark ? 0.2 : 0.04,
+            shadowRadius: 4,
             overflow: 'hidden',
             marginTop: 10,
           }}
@@ -416,7 +430,7 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
               <Text
                 style={{
                   fontSize: 15.5,
-                  fontFamily: 'Satoshi-Bold',
+                  fontFamily: 'PlusJakartaSans-Bold',
                   color: colors.danger,
                   letterSpacing: -0.3,
                 }}
@@ -452,7 +466,7 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
               contentContainerStyle={{ flexGrow: 1, paddingBottom: 16 }}
             >
               <View className="flex-row items-center justify-between mb-3">
-                <Text style={{ fontSize: 18, fontFamily: 'Satoshi-Black', color: colors.textPrimary }}>
+                <Text style={{ fontSize: 18, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary }}>
                   Editar Perfil
                 </Text>
                 <ThemedTouchable onPress={() => setIsEditModalVisible(false)} haptic="light">
@@ -475,7 +489,7 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
                     />
                   ))}
                 </View>
-                <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Bold', color: colors.textSecondary }}>
+                <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.textSecondary }}>
                   Paso {editStep} de 2
                 </Text>
               </View>
@@ -483,10 +497,10 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
               {/* STEP 1: Datos Personales (NO SCROLL) */}
               {editStep === 1 && (
                 <View>
-                  <Text style={{ fontSize: 21, fontFamily: 'Satoshi-Black', color: colors.textPrimary, marginBottom: 2 }}>
+                  <Text style={{ fontSize: 21, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary, marginBottom: 2 }}>
                     Datos Personales
                   </Text>
-                  <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginBottom: 14 }}>
+                  <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, marginBottom: 14 }}>
                     Nombre y teléfono de contacto para el servicio.
                   </Text>
 
@@ -522,7 +536,7 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
               {editStep === 2 && (
                 <View>
                   <View className="flex-row items-center justify-between mb-1">
-                    <Text style={{ fontSize: 21, fontFamily: 'Satoshi-Black', color: colors.textPrimary }}>
+                    <Text style={{ fontSize: 21, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary }}>
                       Ubicación
                     </Text>
                     <ThemedTouchable
@@ -532,9 +546,9 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
                       style={{
                         flexDirection: 'row',
                         alignItems: 'center',
-                        paddingVertical: 5,
-                        paddingHorizontal: 10,
-                        borderRadius: 16,
+                        paddingVertical: 6,
+                        paddingHorizontal: 12,
+                        borderRadius: 999,
                         backgroundColor: colors.primaryLight,
                       }}
                     >
@@ -543,13 +557,13 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
                       ) : (
                         <Ionicons name="navigate-outline" size={13} color={colors.primary} style={{ marginRight: 4 }} />
                       )}
-                      <Text style={{ fontSize: 12, fontFamily: 'Satoshi-Bold', color: colors.primary }}>
+                      <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans-Bold', color: colors.primary }}>
                         {isDetectingLocation ? 'Obteniendo...' : 'GPS'}
                       </Text>
                     </ThemedTouchable>
                   </View>
 
-                  <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginBottom: 12 }}>
+                  <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, marginBottom: 12 }}>
                     Zona de cobertura del servicio en España.
                   </Text>
 
@@ -609,7 +623,16 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
             </ScrollView>
 
             {/* Bottom Stepper Actions (NO SCROLL) */}
-            <View className="flex-row items-center gap-3 pt-3 border-t border-[#E5E5EA]">
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+                paddingTop: 12,
+                borderTopWidth: 1,
+                borderTopColor: colors.border,
+              }}
+            >
               {editStep > 1 && (
                 <View style={{ width: 100 }}>
                   <ThemedTouchable
@@ -625,7 +648,7 @@ export function AccountScreen({ onBack, onShowAlert }: AccountScreenProps) {
                       justifyContent: 'center',
                     }}
                   >
-                    <Text style={{ fontSize: 14.5, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+                    <Text style={{ fontSize: 14.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
                       Atrás
                     </Text>
                   </ThemedTouchable>

@@ -33,12 +33,12 @@ interface YewiProModalProps {
 }
 
 const PRO_FEATURES = [
-  'Prioridad máxima en nuevas solicitudes',
-  'Contacto directo del cliente (teléfono y email)',
+  'Generador de presupuestos formal con plantillas',
+  'Scraping y benchmarking de precios con IA en tiempo real',
+  'Prioridad máxima en nuevas solicitudes de clientes',
+  'Contacto directo del cliente (teléfono y chat)',
   'Sin comisiones por trabajos ni presupuestos',
-  'Cobertura nacional sin límites en tu país',
   'Insignia Verificada Pro destacada en búsquedas',
-  'Alertas instantáneas de nuevos leads',
 ];
 
 export function YewiProModal({
@@ -222,15 +222,15 @@ export function YewiProModal({
           >
             <Ionicons name="arrow-back" size={20} color="#FFFFFF" />
           </ThemedTouchable>
-          <Text style={{ fontSize: 17, fontFamily: 'Satoshi-Bold', color: '#FFFFFF', marginLeft: 12 }}>
-            {isPro ? 'Gestión de Plan Yewi Pro' : 'Planes y Suscripción'}
+          <Text numberOfLines={1} style={{ fontSize: 17, fontFamily: 'PlusJakartaSans-Bold', color: '#FFFFFF', marginLeft: 12, flex: 1 }}>
+            {isPro ? 'Plan Pro' : 'Planes Pro'}
           </Text>
         </View>
 
         {loadingStatus ? (
           <View className="flex-1 items-center justify-center">
             <ActivityIndicator size="large" color="#FDE047" />
-            <Text style={{ marginTop: 12, color: '#E2E8F0', fontFamily: 'Satoshi-Medium' }}>
+            <Text style={{ marginTop: 12, color: '#E2E8F0', fontFamily: 'PlusJakartaSans-Medium' }}>
               {t.loading}
             </Text>
           </View>
@@ -246,11 +246,11 @@ export function YewiProModal({
             <View style={[styles.pricingCard, { padding: 20 }]}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
                 <View>
-                  <Text style={{ fontSize: 20, fontFamily: 'Satoshi-Black', color: '#FFFFFF' }}>
+                  <Text style={{ fontSize: 20, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#FFFFFF' }}>
                     Yewi Pro
                   </Text>
-                  <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Medium', color: '#FDE047', marginTop: 2 }}>
-                    Facturación mensual · 9,99 € / mes
+                  <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Medium', color: '#FDE047', marginTop: 2 }}>
+                    Facturación mensual · {subData?.priceEur ? `${subData.priceEur.toFixed(2).replace('.', ',')} €` : '15,99 €'} / mes
                   </Text>
                 </View>
                 <View
@@ -266,7 +266,7 @@ export function YewiProModal({
                   <Text
                     style={{
                       fontSize: 11,
-                      fontFamily: 'Satoshi-Black',
+                      fontFamily: 'PlusJakartaSans-ExtraBold',
                       color: isCancelled ? '#F87171' : '#34D399',
                     }}
                   >
@@ -286,7 +286,7 @@ export function YewiProModal({
                     color="#FDE047"
                     style={{ marginRight: 10 }}
                   />
-                  <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Medium', color: 'rgba(255,255,255,0.9)', flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.9)', flex: 1 }}>
                     {isCancelled
                       ? `Finaliza el periodo: ${renewalDate || 'Fin de mes'}`
                       : `Próxima renovación automática: ${renewalDate || 'Mensual'}`}
@@ -295,7 +295,7 @@ export function YewiProModal({
 
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Ionicons name="card-outline" size={17} color="#FDE047" style={{ marginRight: 10 }} />
-                  <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Medium', color: 'rgba(255,255,255,0.9)', flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.9)', flex: 1 }}>
                     Método de pago: {paymentCard}
                   </Text>
                 </View>
@@ -304,7 +304,7 @@ export function YewiProModal({
 
             {/* Card 2: Ventajas Activas */}
             <View style={{ backgroundColor: '#232226', borderRadius: 20, padding: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' }}>
-              <Text style={{ fontSize: 15, fontFamily: 'Satoshi-Bold', color: '#FFFFFF', marginBottom: 12 }}>
+              <Text style={{ fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: '#FFFFFF', marginBottom: 12 }}>
                 Tus ventajas Pro activas
               </Text>
               <View style={{ gap: 10 }}>
@@ -313,7 +313,7 @@ export function YewiProModal({
                     <View style={styles.checkIconWrapper}>
                       <Ionicons name="checkmark" size={11} color="#000000" />
                     </View>
-                    <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Regular', color: '#E4E4E7', flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Regular', color: '#E4E4E7', flex: 1 }}>
                       {feat}
                     </Text>
                   </View>
@@ -357,7 +357,7 @@ export function YewiProModal({
                   {isProcessing ? (
                     <ActivityIndicator size="small" color="#F87171" />
                   ) : (
-                    <Text style={{ fontSize: 14, fontFamily: 'Satoshi-Bold', color: '#F87171' }}>
+                    <Text style={{ fontSize: 14, fontFamily: 'PlusJakartaSans-Bold', color: '#F87171' }}>
                       Cancelar Renovación Automática
                     </Text>
                   )}
@@ -380,7 +380,7 @@ export function YewiProModal({
                 }}
               >
                 <Ionicons name="receipt-outline" size={16} color="rgba(255,255,255,0.7)" />
-                <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Medium', color: 'rgba(255,255,255,0.8)' }}>
+                <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.8)' }}>
                   Descargar Facturas con IVA (PDF)
                 </Text>
               </ThemedTouchable>
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
   },
   mainTitle: {
     fontSize: 27,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
     color: '#FFFFFF',
     letterSpacing: -0.5,
   },
@@ -543,35 +543,35 @@ const styles = StyleSheet.create({
   tabText: {
     color: '#18181B',
     fontSize: 11.5,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
     letterSpacing: 0.2,
     zIndex: 6,
   },
   planName: {
     fontSize: 20,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
     color: '#FFFFFF',
     letterSpacing: -0.3,
   },
   mainPrice: {
     fontSize: 36,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
     color: '#FDE047',
     letterSpacing: -1,
   },
   priceSubtext: {
     fontSize: 12,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
     color: 'rgba(255, 255, 255, 0.9)',
   },
   priceBilledText: {
     fontSize: 10.5,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans-Medium',
     color: 'rgba(255, 255, 255, 0.6)',
   },
   pitchText: {
     fontSize: 12.5,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans-Medium',
     color: 'rgba(255, 255, 255, 0.8)',
     lineHeight: 17,
   },
@@ -591,7 +591,7 @@ const styles = StyleSheet.create({
   },
   featureText: {
     fontSize: 13,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans-Medium',
     color: '#FFFFFF',
     flex: 1,
   },
@@ -609,13 +609,13 @@ const styles = StyleSheet.create({
   },
   whiteCtaText: {
     fontSize: 15,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
     color: '#18181B',
     letterSpacing: -0.2,
   },
   footerNote: {
     fontSize: 11.5,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans-Medium',
     color: 'rgba(255, 255, 255, 0.65)',
     textAlign: 'center',
     marginTop: 6,

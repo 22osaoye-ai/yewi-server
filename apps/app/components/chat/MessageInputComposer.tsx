@@ -12,7 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { ThemedTouchable } from '@/components/ui/ThemedTouchable';
 import { useAppTheme } from '@/hooks/useAppTheme';
-import { AttachmentMeta } from '@/services/chatApi';
+import { AttachmentMeta, ChatMessage } from '@/services/chatApi';
 import { AttachmentPickerModal } from './AttachmentPickerModal';
 import { QuickActionsModal } from './QuickActionsModal';
 
@@ -25,6 +25,8 @@ interface MessageInputComposerProps {
   onRemovePendingAttachment: () => void;
   onSelectAttachment: (attachment: AttachmentMeta & { localUri?: string; base64?: string }) => void;
   onSelectQuickAction: (text: string) => void;
+  replyingTo?: ChatMessage | null;
+  onCancelReply?: () => void;
 }
 
 export function MessageInputComposer({
@@ -36,6 +38,8 @@ export function MessageInputComposer({
   onRemovePendingAttachment,
   onSelectAttachment,
   onSelectQuickAction,
+  replyingTo,
+  onCancelReply,
 }: MessageInputComposerProps) {
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useAppTheme();
@@ -62,6 +66,60 @@ export function MessageInputComposer({
         },
       ]}
     >
+      {/* 0. Quoted Reply Preview Banner (WhatsApp / Telegram style) */}
+      {replyingTo && (
+        <View
+          style={[
+            styles.replyBanner,
+            {
+              backgroundColor: isDark ? '#1C202C' : '#F1F5F9',
+              borderColor: isDark ? '#2D3548' : '#E2E8F0',
+              borderLeftColor: colors.primary,
+            },
+          ]}
+        >
+          <View style={styles.replyBannerContent}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+              <Ionicons name="arrow-undo" size={13} color={colors.primary} />
+              <Text
+                numberOfLines={1}
+                style={[styles.replyBannerSender, { color: colors.primary }]}
+              >
+                {replyingTo.sender?.profile?.displayName || 'Usuario'}
+              </Text>
+            </View>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.replyBannerText,
+                { color: isDark ? '#CBD5E1' : '#475569' },
+              ]}
+            >
+              {replyingTo.content ||
+                (replyingTo.attachments?.length ? '📷 Archivo adjunto' : 'Mensaje')}
+            </Text>
+          </View>
+
+          {replyingTo.attachments && replyingTo.attachments.length > 0 && (
+            <Image
+              source={{ uri: replyingTo.attachments[0] }}
+              style={styles.replyBannerThumb}
+              contentFit="cover"
+            />
+          )}
+
+          {onCancelReply && (
+            <ThemedTouchable
+              onPress={onCancelReply}
+              haptic="light"
+              style={styles.cancelReplyBtn}
+            >
+              <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+            </ThemedTouchable>
+          )}
+        </View>
+      )}
+
       {/* 1. Pending Attachment Strip */}
       {pendingAttachment && (
         <View
@@ -231,6 +289,38 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     borderTopWidth: 1,
   },
+  replyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 9,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderLeftWidth: 4,
+    marginBottom: 8,
+    gap: 8,
+  },
+  replyBannerContent: {
+    flex: 1,
+    gap: 2,
+  },
+  replyBannerSender: {
+    fontSize: 12,
+    fontFamily: 'PlusJakartaSans-Bold',
+  },
+  replyBannerText: {
+    fontSize: 12,
+    fontFamily: 'PlusJakartaSans-Regular',
+  },
+  replyBannerThumb: {
+    width: 36,
+    height: 36,
+    borderRadius: 6,
+  },
+  cancelReplyBtn: {
+    padding: 4,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   pendingStrip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -254,11 +344,11 @@ const styles = StyleSheet.create({
   },
   pendingName: {
     fontSize: 13,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
   },
   pendingType: {
     fontSize: 11,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans-Medium',
     marginTop: 1,
   },
   removePendingBtn: {
@@ -288,7 +378,7 @@ const styles = StyleSheet.create({
   },
   textInput: {
     fontSize: 15,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Regular',
     padding: 0,
     margin: 0,
   },

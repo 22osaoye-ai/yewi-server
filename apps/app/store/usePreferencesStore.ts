@@ -10,10 +10,12 @@ interface PreferencesState {
   darkMode: boolean;
   currency: SupportedCurrency;
   language: SupportedLanguage;
+  biometricsEnabled: boolean;
   setPushNotificationsEnabled: (enabled: boolean) => void;
   setDarkMode: (enabled: boolean) => void;
   setCurrency: (currency: SupportedCurrency) => void;
   setLanguage: (language: SupportedLanguage) => void;
+  setBiometricsEnabled: (enabled: boolean) => void;
 }
 
 export const usePreferencesStore = create<PreferencesState>()(
@@ -23,6 +25,7 @@ export const usePreferencesStore = create<PreferencesState>()(
       darkMode: false,
       currency: 'EUR',
       language: 'es',
+      biometricsEnabled: false,
 
       setPushNotificationsEnabled: (pushNotificationsEnabled) =>
         set({ pushNotificationsEnabled }),
@@ -32,6 +35,8 @@ export const usePreferencesStore = create<PreferencesState>()(
       setCurrency: (currency) => set({ currency }),
 
       setLanguage: (language) => set({ language }),
+
+      setBiometricsEnabled: (biometricsEnabled) => set({ biometricsEnabled }),
     }),
     {
       name: 'yewi-app-preferences',

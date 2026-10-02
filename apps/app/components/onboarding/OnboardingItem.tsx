@@ -102,20 +102,20 @@ export function OnboardingItem({
         <Animated.View style={contentAnimationStyle} className="flex-row items-start mt-4 z-10">
           {/* Vertical Rotated Text */}
           <View className="mr-4 -rotate-90 -ml-5 mt-7">
-            <Text className="text-white/80 font-satoshi-medium text-xs tracking-widest uppercase">
+            <Text className="text-white/80 font-sans-medium text-xs tracking-widest uppercase">
               {item.tag}
             </Text>
           </View>
 
           {/* Main Title */}
           <View className="flex-1">
-            <Text className="text-[40px] font-satoshi-black text-white leading-[44px] tracking-tight">
+            <Text className="text-[40px] font-sans-black text-white leading-[44px] tracking-tight">
               {item.title1}
             </Text>
-            <Text className="text-[40px] font-satoshi-black text-[#F3EFEA] leading-[44px] tracking-tight">
+            <Text className="text-[40px] font-sans-black text-[#F3EFEA] leading-[44px] tracking-tight">
               {item.title2}
             </Text>
-            <Text className="text-[40px] font-satoshi-black text-white leading-[44px] tracking-tight">
+            <Text className="text-[40px] font-sans-black text-white leading-[44px] tracking-tight">
               {item.title3}
             </Text>
           </View>
@@ -126,18 +126,18 @@ export function OnboardingItem({
           <View className="bg-white/25 backdrop-blur-2xl rounded-[28px] p-4 border border-white/40 shadow-2xl elevation-12">
             {/* Category Pill */}
             <View className="self-start bg-black/30 rounded-full px-2.5 py-0.5 mb-2">
-              <Text className="text-white font-satoshi-medium text-[11px]">
+              <Text className="text-white font-sans-medium text-[11px]">
                 {item.category}
               </Text>
             </View>
 
             {/* Chair Title */}
-            <Text className="text-white font-satoshi-bold text-base tracking-tight mb-1">
+            <Text className="text-white font-sans-bold text-base tracking-tight mb-1">
               {item.productName}
             </Text>
 
             {/* Available Colors */}
-            <Text className="text-white/85 font-satoshi text-xs mb-1.5">
+            <Text className="text-white/85 font-sans text-xs mb-1.5">
               Available Color:
             </Text>
             <View className="flex-row items-center gap-2 mb-3.5">
@@ -156,7 +156,7 @@ export function OnboardingItem({
 
             {/* Price & Arrow Button */}
             <View className="flex-row justify-between items-center">
-              <Text className="text-white font-satoshi-black text-lg tracking-tight">
+              <Text className="text-white font-sans-black text-lg tracking-tight">
                 {item.price}
               </Text>
               <ThemedTouchable

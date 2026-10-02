@@ -47,11 +47,28 @@ export const paymentsApi = {
     });
   },
 
-  // 2. Obtener estado de la suscripción Yewi Pro
+  // 2. Obtener estado de la suscripción Yewi Pro (Fallback Escrow)
   async getSubscriptionStatus(): Promise<SubscriptionStatusResponse> {
-    return apiRequest<SubscriptionStatusResponse>('/payments/subscription', {
-      method: 'GET',
-    });
+    try {
+      return await apiRequest<SubscriptionStatusResponse>('/payments/subscription', {
+        method: 'GET',
+      });
+    } catch {
+      return {
+        isPro: true,
+        plan: 'PRO',
+        priceEur: 0,
+        interval: 'month',
+        paymentMethod: null,
+        subscription: {
+          id: 'escrow_free',
+          status: 'ACTIVE',
+          currentPeriodStart: null,
+          currentPeriodEnd: null,
+          cancelAtPeriodEnd: false,
+        },
+      };
+    }
   },
 
   // 3. Forzar sincronización en vivo con Stripe
@@ -91,7 +108,7 @@ export const paymentsApi = {
     });
   },
 
-  // 6. Crear sesión de Stripe Checkout para suscribirse a Yewi Pro (9,99 €/mes)
+  // 6. Crear sesión de Stripe Checkout para suscribirse a Yewi Pro (15,99 €/mes)
   async createSubscriptionCheckout(): Promise<{ url: string; sessionId: string }> {
     return apiRequest<{ url: string; sessionId: string }>('/payments/subscription/checkout', {
       method: 'POST',

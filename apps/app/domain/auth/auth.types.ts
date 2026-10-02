@@ -15,6 +15,7 @@ export interface AddressInfo {
 }
 
 export interface ProfessionalDetails {
+  id?: string;
   businessName?: string;
   bio?: string;
   skills: string[];
@@ -23,6 +24,8 @@ export interface ProfessionalDetails {
   address?: AddressInfo;
   taxId?: string; // NIF / CIF
   kycStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  avgRating?: number;
+  totalReviews?: number;
 }
 
 export interface UserProfile {

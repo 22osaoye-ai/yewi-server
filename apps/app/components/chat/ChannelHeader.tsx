@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   unreadBadgeText: {
     color: '#FFFFFF',
     fontSize: 10,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
   },
   centerInfoTouchable: {
     flex: 1,
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   },
   displayNameText: {
     fontSize: 16,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
     letterSpacing: -0.2,
   },
   proBadgePill: {
@@ -202,12 +202,12 @@ const styles = StyleSheet.create({
   proBadgeText: {
     color: '#FFFFFF',
     fontSize: 9,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
     letterSpacing: 0.4,
   },
   subtitleText: {
     fontSize: 12,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans-Medium',
     marginTop: 1,
   },
   avatarTouchable: {
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   },
   avatarInitial: {
     fontSize: 16,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
   },
   onlineDot: {
     position: 'absolute',

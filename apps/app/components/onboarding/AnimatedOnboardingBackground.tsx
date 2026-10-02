@@ -129,8 +129,8 @@ export function AnimatedOnboardingBackground({ index, x }: AnimatedBackgroundPro
         >
           <Defs>
             <RadialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
-              <Stop offset="0%" stopColor="#C87D20" stopOpacity="0.15" />
-              <Stop offset="100%" stopColor="#C87D20" stopOpacity="0" />
+              <Stop offset="0%" stopColor="#0284C7" stopOpacity="0.15" />
+              <Stop offset="100%" stopColor="#0284C7" stopOpacity="0" />
             </RadialGradient>
           </Defs>
 
@@ -158,7 +158,7 @@ export function AnimatedOnboardingBackground({ index, x }: AnimatedBackgroundPro
             cx={SCREEN_WIDTH * 0.8}
             cy={SCREEN_HEIGHT * 0.35}
             r="90"
-            stroke="#C87D20"
+            stroke="#0284C7"
             strokeWidth="1.5"
             strokeDasharray="6 8"
             strokeOpacity="0.25"

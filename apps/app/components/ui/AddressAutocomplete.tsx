@@ -191,7 +191,7 @@ export function AddressAutocomplete({
         ) : (
           <Ionicons name="location" size={18} color={colors.primary} style={{ marginRight: 8 }} />
         )}
-        <Text style={{ fontSize: 13.5, fontFamily: 'Satoshi-Bold', color: colors.primary }}>
+        <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.primary }}>
           {isDetectingGPS ? 'Detectando ubicación GPS...' : 'Usar mi ubicación GPS actual'}
         </Text>
       </ThemedTouchable>
@@ -246,14 +246,14 @@ export function AddressAutocomplete({
                 }}
               >
                 <View className="flex-row items-center">
-                  <Text style={{ fontSize: 13.5, fontFamily: 'Satoshi-Bold', color: colors.textPrimary, marginRight: 8 }}>
+                  <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary, marginRight: 8 }}>
                     {prov.name}
                   </Text>
-                  <Text style={{ fontSize: 11.5, fontFamily: 'Satoshi-Regular', color: colors.textSecondary }}>
+                  <Text style={{ fontSize: 11.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary }}>
                     ({prov.regionName})
                   </Text>
                 </View>
-                <Text style={{ fontSize: 11.5, fontFamily: 'Satoshi-Bold', color: colors.primary }}>
+                <Text style={{ fontSize: 11.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.primary }}>
                   CP: {prov.code}xxx
                 </Text>
               </ThemedTouchable>
@@ -265,7 +265,7 @@ export function AddressAutocomplete({
       {/* Step 2: Locality / Municipality Picker */}
       {localities.length > 0 && (
         <View className="mb-3">
-          <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Bold', color: colors.textPrimary, marginBottom: 6, marginLeft: 4 }}>
+          <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary, marginBottom: 6, marginLeft: 4 }}>
             Municipio / Localidad ({selectedProvince.name})
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row gap-2">
@@ -300,7 +300,7 @@ export function AddressAutocomplete({
                   <Text
                     style={{
                       fontSize: 12.5,
-                      fontFamily: isSelected ? 'Satoshi-Bold' : 'Satoshi-Medium',
+                      fontFamily: isSelected ? 'PlusJakartaSans-Bold' : 'PlusJakartaSans-Medium',
                       color: isSelected
                         ? (isDark ? '#121214' : '#FFFFFF')
                         : colors.textPrimary,
@@ -373,12 +373,12 @@ export function AddressAutocomplete({
               >
                 <View className="flex-row items-center flex-1 mr-2">
                   <Ionicons name="location-outline" size={15} color={colors.primary} style={{ marginRight: 6 }} />
-                  <Text style={{ fontSize: 13.5, fontFamily: 'Satoshi-Bold', color: colors.textPrimary, flex: 1 }} numberOfLines={1}>
+                  <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary, flex: 1 }} numberOfLines={1}>
                     {st.name}
                   </Text>
                 </View>
                 <View style={{ backgroundColor: colors.primaryLight, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 2 }}>
-                  <Text style={{ fontSize: 11.5, fontFamily: 'Satoshi-Bold', color: colors.primary }}>
+                  <Text style={{ fontSize: 11.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.primary }}>
                     CP: {st.postalCode}
                   </Text>
                 </View>

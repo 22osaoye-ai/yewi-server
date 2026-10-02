@@ -406,7 +406,11 @@ export default function ProfessionalProfileScreen() {
     if (currentStep > 1) {
       setCurrentStep((prev) => prev - 1);
     } else {
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)/profile');
+      }
     }
   };
 
@@ -471,7 +475,11 @@ export default function ProfessionalProfileScreen() {
         'Tu información y portafolio están listos y visibles para clientes.',
       );
       setTimeout(() => {
-        router.back();
+        if (router.canGoBack()) {
+          router.back();
+        } else {
+          router.replace('/(tabs)/profile');
+        }
       }, 400);
     } catch (e: any) {
       toast.error(
@@ -494,7 +502,7 @@ export default function ProfessionalProfileScreen() {
           paddingTop: Math.max(insets.top + 8, 20),
           paddingHorizontal: 22,
           paddingBottom: 14,
-          backgroundColor: colors.surface,
+          backgroundColor: colors.background,
           borderBottomWidth: 1,
           borderBottomColor: colors.borderSubtle,
         }}
@@ -511,23 +519,23 @@ export default function ProfessionalProfileScreen() {
             onPress={handleBack}
             haptic="light"
             style={{
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              backgroundColor: colors.surfaceAlt,
+              width: 46,
+              height: 46,
+              borderRadius: 23,
+              backgroundColor: colors.surface,
               alignItems: 'center',
               justifyContent: 'center',
               borderWidth: 1,
-              borderColor: colors.border,
+              borderColor: colors.borderSubtle,
             }}
           >
-            <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+            <Ionicons name="arrow-back" size={24} color={colors.textPrimary} />
           </ThemedTouchable>
 
           <Text
             style={{
               fontSize: 17,
-              fontFamily: 'Satoshi-Black',
+              fontFamily: 'PlusJakartaSans-ExtraBold',
               color: colors.textPrimary,
             }}
           >
@@ -570,7 +578,7 @@ export default function ProfessionalProfileScreen() {
           <Text
             style={{
               fontSize: 12,
-              fontFamily: 'Satoshi-Bold',
+              fontFamily: 'PlusJakartaSans-Bold',
               color: colors.textSecondary,
             }}
           >
@@ -588,7 +596,7 @@ export default function ProfessionalProfileScreen() {
           <Text
             style={{
               fontSize: 13.5,
-              fontFamily: 'Satoshi-Medium',
+              fontFamily: 'PlusJakartaSans-Medium',
               color: colors.textSecondary,
               marginTop: 12,
             }}
@@ -614,7 +622,7 @@ export default function ProfessionalProfileScreen() {
                 <Text
                   style={{
                     fontSize: 21,
-                    fontFamily: 'Satoshi-Black',
+                    fontFamily: 'PlusJakartaSans-ExtraBold',
                     color: colors.textPrimary,
                     marginBottom: 2,
                   }}
@@ -624,7 +632,7 @@ export default function ProfessionalProfileScreen() {
                 <Text
                   style={{
                     fontSize: 13,
-                    fontFamily: 'Satoshi-Regular',
+                    fontFamily: 'PlusJakartaSans-Regular',
                     color: colors.textSecondary,
                     marginBottom: 8,
                   }}
@@ -682,7 +690,7 @@ export default function ProfessionalProfileScreen() {
                 <Text
                   style={{
                     fontSize: 21,
-                    fontFamily: 'Satoshi-Black',
+                    fontFamily: 'PlusJakartaSans-ExtraBold',
                     color: colors.textPrimary,
                     marginBottom: 2,
                   }}
@@ -692,7 +700,7 @@ export default function ProfessionalProfileScreen() {
                 <Text
                   style={{
                     fontSize: 13,
-                    fontFamily: 'Satoshi-Regular',
+                    fontFamily: 'PlusJakartaSans-Regular',
                     color: colors.textSecondary,
                     marginBottom: 8,
                   }}
@@ -720,7 +728,7 @@ export default function ProfessionalProfileScreen() {
                     style={{
                       color: '#EF4444',
                       fontSize: 12,
-                      fontFamily: 'Satoshi-Medium',
+                      fontFamily: 'PlusJakartaSans-Medium',
                       marginTop: 8,
                     }}
                   >
@@ -736,7 +744,7 @@ export default function ProfessionalProfileScreen() {
                 <Text
                   style={{
                     fontSize: 21,
-                    fontFamily: 'Satoshi-Black',
+                    fontFamily: 'PlusJakartaSans-ExtraBold',
                     color: colors.textPrimary,
                     marginBottom: 2,
                   }}
@@ -746,7 +754,7 @@ export default function ProfessionalProfileScreen() {
                 <Text
                   style={{
                     fontSize: 13,
-                    fontFamily: 'Satoshi-Regular',
+                    fontFamily: 'PlusJakartaSans-Regular',
                     color: colors.textSecondary,
                     marginBottom: 8,
                   }}
@@ -773,7 +781,7 @@ export default function ProfessionalProfileScreen() {
                 <Text
                   style={{
                     fontSize: 12,
-                    fontFamily: 'Satoshi-Medium',
+                    fontFamily: 'PlusJakartaSans-Medium',
                     color: colors.textMuted,
                     textAlign: 'right',
                   }}
@@ -789,7 +797,7 @@ export default function ProfessionalProfileScreen() {
                 <Text
                   style={{
                     fontSize: 21,
-                    fontFamily: 'Satoshi-Black',
+                    fontFamily: 'PlusJakartaSans-ExtraBold',
                     color: colors.textPrimary,
                     marginBottom: 2,
                   }}
@@ -799,7 +807,7 @@ export default function ProfessionalProfileScreen() {
                 <Text
                   style={{
                     fontSize: 13,
-                    fontFamily: 'Satoshi-Regular',
+                    fontFamily: 'PlusJakartaSans-Regular',
                     color: colors.textSecondary,
                     marginBottom: 8,
                   }}
@@ -840,7 +848,7 @@ export default function ProfessionalProfileScreen() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     paddingVertical: 12,
-                    borderRadius: 14,
+                    borderRadius: 999,
                     backgroundColor: colors.surface,
                     borderWidth: 1,
                     borderColor: colors.border,
@@ -859,7 +867,7 @@ export default function ProfessionalProfileScreen() {
                       <Text
                         style={{
                           fontSize: 13,
-                          fontFamily: 'Satoshi-Bold',
+                          fontFamily: 'PlusJakartaSans-Bold',
                           color: colors.primary,
                         }}
                       >
@@ -932,7 +940,7 @@ export default function ProfessionalProfileScreen() {
                   <Text
                     style={{
                       fontSize: 21,
-                      fontFamily: 'Satoshi-Black',
+                      fontFamily: 'PlusJakartaSans-ExtraBold',
                       color: colors.textPrimary,
                     }}
                   >
@@ -966,7 +974,7 @@ export default function ProfessionalProfileScreen() {
                     <Text
                       style={{
                         fontSize: 12,
-                        fontFamily: 'Satoshi-Bold',
+                        fontFamily: 'PlusJakartaSans-Bold',
                         color: colors.primary,
                       }}
                     >
@@ -978,7 +986,7 @@ export default function ProfessionalProfileScreen() {
                 <Text
                   style={{
                     fontSize: 13,
-                    fontFamily: 'Satoshi-Regular',
+                    fontFamily: 'PlusJakartaSans-Regular',
                     color: colors.textSecondary,
                     marginBottom: 4,
                   }}
@@ -1014,7 +1022,7 @@ export default function ProfessionalProfileScreen() {
                     <Text
                       style={{
                         color: colors.primary,
-                        fontFamily: 'Satoshi-Bold',
+                        fontFamily: 'PlusJakartaSans-Bold',
                         fontSize: 14.5,
                       }}
                     >
@@ -1042,7 +1050,7 @@ export default function ProfessionalProfileScreen() {
                       <Text
                         style={{
                           fontSize: 15.5,
-                          fontFamily: 'Satoshi-Bold',
+                          fontFamily: 'PlusJakartaSans-Bold',
                           color: colors.textPrimary,
                         }}
                       >
@@ -1106,7 +1114,7 @@ export default function ProfessionalProfileScreen() {
                           <Text
                             style={{
                               fontSize: 13,
-                              fontFamily: 'Satoshi-Bold',
+                              fontFamily: 'PlusJakartaSans-Bold',
                               color: colors.primary,
                             }}
                           >
@@ -1135,7 +1143,7 @@ export default function ProfessionalProfileScreen() {
                         <Text
                           style={{
                             color: '#FFFFFF',
-                            fontFamily: 'Satoshi-Bold',
+                            fontFamily: 'PlusJakartaSans-Bold',
                             fontSize: 14.5,
                           }}
                         >
@@ -1199,7 +1207,7 @@ export default function ProfessionalProfileScreen() {
                             numberOfLines={1}
                             style={{
                               fontSize: 14.5,
-                              fontFamily: 'Satoshi-Bold',
+                              fontFamily: 'PlusJakartaSans-Bold',
                               color: colors.textPrimary,
                             }}
                           >
@@ -1209,7 +1217,7 @@ export default function ProfessionalProfileScreen() {
                             numberOfLines={2}
                             style={{
                               fontSize: 12.5,
-                              fontFamily: 'Satoshi-Regular',
+                              fontFamily: 'PlusJakartaSans-Regular',
                               color: colors.textSecondary,
                               marginTop: 2,
                               lineHeight: 16,
@@ -1243,7 +1251,7 @@ export default function ProfessionalProfileScreen() {
                             <Text
                               style={{
                                 color: '#EF4444',
-                                fontFamily: 'Satoshi-Bold',
+                                fontFamily: 'PlusJakartaSans-Bold',
                                 fontSize: 12,
                               }}
                             >
@@ -1265,7 +1273,7 @@ export default function ProfessionalProfileScreen() {
                     <Text
                       style={{
                         fontSize: 13,
-                        fontFamily: 'Satoshi-Regular',
+                        fontFamily: 'PlusJakartaSans-Regular',
                         color: colors.textMuted,
                         textAlign: 'center',
                       }}
@@ -1311,7 +1319,7 @@ export default function ProfessionalProfileScreen() {
                   <Text
                     style={{
                       fontSize: 14.5,
-                      fontFamily: 'Satoshi-Bold',
+                      fontFamily: 'PlusJakartaSans-Bold',
                       color: colors.textPrimary,
                     }}
                   >
@@ -1341,7 +1349,7 @@ export default function ProfessionalProfileScreen() {
                     style={{
                       color: '#FFFFFF',
                       fontSize: 15,
-                      fontFamily: 'Satoshi-Bold',
+                      fontFamily: 'PlusJakartaSans-Bold',
                     }}
                   >
                     {currentStep === 5 ? 'Guardar Perfil' : 'Continuar'}

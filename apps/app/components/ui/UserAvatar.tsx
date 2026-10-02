@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Image, StyleSheet, ViewStyle } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedTouchable } from './ThemedTouchable';
+import { useAppTheme } from '@/hooks/useAppTheme';
 
 interface UserAvatarProps {
   size?: number;
@@ -10,6 +11,7 @@ interface UserAvatarProps {
   isOnline?: boolean;
   onPressCamera?: () => void;
   backgroundColor?: string;
+  dotBorderColor?: string;
   style?: ViewStyle;
 }
 
@@ -19,12 +21,27 @@ export function UserAvatar({
   imageUri,
   isOnline = true,
   onPressCamera,
-  backgroundColor = '#C87D20',
+  backgroundColor,
+  dotBorderColor,
   style,
 }: UserAvatarProps) {
-  const cameraBtnSize = Math.max(Math.round(size * 0.4), 24);
-  const onlineDotSize = Math.max(Math.round(size * 0.22), 12);
-  const fontSize = Math.round(size * 0.45);
+  const { colors, isDark } = useAppTheme();
+  const [imageError, setImageError] = React.useState(false);
+
+  // Reset error when imageUri changes
+  React.useEffect(() => {
+    setImageError(false);
+  }, [imageUri]);
+
+  const defaultBg = isDark ? '#1E293B' : '#E0F2FE';
+  const resolvedBg = backgroundColor ?? (imageUri && !imageError ? 'transparent' : defaultBg);
+  const textColor = isDark ? colors.primary : '#0369A1';
+  const cameraBtnSize = Math.max(Math.round(size * 0.38), 24);
+  const onlineDotSize = Math.max(Math.round(size * 0.22), 10);
+  const fontSize = Math.round(size * 0.4);
+  const resolvedDotBorderColor = dotBorderColor ?? (isDark ? '#181A20' : '#FFFFFF');
+
+  const hasValidImage = Boolean(imageUri && !imageError);
 
   return (
     <View style={[styles.wrapper, { width: size, height: size }, style]}>
@@ -36,19 +53,33 @@ export function UserAvatar({
             width: size,
             height: size,
             borderRadius: size / 2,
-            backgroundColor,
+            backgroundColor: resolvedBg,
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
           },
         ]}
       >
-        {imageUri ? (
+        {hasValidImage ? (
           <Image
             source={{ uri: imageUri }}
+            onError={() => setImageError(true)}
             style={{ width: size, height: size, borderRadius: size / 2 }}
           />
-        ) : (
-          <Text style={[styles.initialText, { fontSize }]}>
-            {initial.toUpperCase()}
+        ) : initial ? (
+          <Text
+            numberOfLines={1}
+            style={[
+              styles.initialText,
+              { fontSize, color: textColor },
+            ]}
+          >
+            {initial.slice(0, 2).toUpperCase()}
           </Text>
+        ) : (
+          <Ionicons
+            name="person"
+            size={Math.round(size * 0.5)}
+            color={textColor}
+          />
         )}
       </View>
 
@@ -83,6 +114,7 @@ export function UserAvatar({
             height: onlineDotSize,
             borderRadius: onlineDotSize / 2,
             backgroundColor: isOnline ? '#10B981' : '#9CA3AF',
+            borderColor: resolvedDotBorderColor,
           },
         ]}
       />
@@ -102,7 +134,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   initialText: {
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
     color: '#FFFFFF',
   },
   cameraBtn: {

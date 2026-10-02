@@ -74,7 +74,7 @@ export function AuthHeader({
       <Text
         style={{
           fontSize: 28,
-          fontFamily: 'Satoshi-Black',
+          fontFamily: 'PlusJakartaSans-ExtraBold',
           color: colors.textPrimary,
           letterSpacing: -0.6,
           marginBottom: 8,
@@ -89,7 +89,7 @@ export function AuthHeader({
         <Text
           style={{
             fontSize: 14,
-            fontFamily: 'Satoshi-Regular',
+            fontFamily: 'PlusJakartaSans-Regular',
             color: colors.textSecondary,
             lineHeight: 20,
             textAlign: isLeft ? 'left' : 'center',

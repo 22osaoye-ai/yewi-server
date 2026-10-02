@@ -108,7 +108,7 @@ export function SwipeableRow({
     <View style={[styles.container, { borderRadius }]}>
       {/* Background Actions (Hidden at rest) */}
       {!disabled && (
-        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {/* Swiping Left -> Reveals Right Action (Delete) */}
           {onSwipeLeft && (
             <Animated.View
@@ -126,7 +126,7 @@ export function SwipeableRow({
               <View className="items-center">
                 <Ionicons name={rightIcon} size={22} color="#FFFFFF" />
                 {rightLabel ? (
-                  <Text style={{ color: '#FFFFFF', fontSize: 11, fontFamily: 'Satoshi-Bold', marginTop: 2 }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 11, fontFamily: 'PlusJakartaSans-Bold', marginTop: 2 }}>
                     {rightLabel}
                   </Text>
                 ) : null}
@@ -151,7 +151,7 @@ export function SwipeableRow({
               <View className="items-center">
                 <Ionicons name={leftIcon} size={22} color="#FFFFFF" />
                 {leftLabel ? (
-                  <Text style={{ color: '#FFFFFF', fontSize: 11, fontFamily: 'Satoshi-Bold', marginTop: 2 }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 11, fontFamily: 'PlusJakartaSans-Bold', marginTop: 2 }}>
                     {leftLabel}
                   </Text>
                 ) : null}
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   actionBackground: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     flexDirection: 'row',
     alignItems: 'center',
   },

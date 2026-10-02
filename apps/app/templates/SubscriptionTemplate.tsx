@@ -23,6 +23,11 @@ import { toast } from '@/store/useToastStore';
 
 const PRO_BENEFITS = [
   {
+    icon: 'sparkles-outline' as const,
+    title: 'Generador de Presupuestos con IA',
+    desc: 'Crea presupuestos formales desglosados en segundos con plantillas por gremio y benchmarking de precios de mercado.',
+  },
+  {
     icon: 'flash-outline' as const,
     title: 'Acceso Prioritario Inmediato',
     desc: 'Recibe todas las nuevas solicitudes de clientes de tu zona al instante antes que nadie.',
@@ -204,7 +209,7 @@ export function SubscriptionTemplate() {
           paddingTop: Math.max(insets.top + 8, 20),
           paddingBottom: 14,
           paddingHorizontal: 18,
-          backgroundColor: colors.surface,
+          backgroundColor: colors.background,
           borderBottomWidth: 1,
           borderBottomColor: colors.borderSubtle,
           flexDirection: 'row',
@@ -213,15 +218,17 @@ export function SubscriptionTemplate() {
         }}
       >
         <ThemedTouchable
-          onPress={() => router.back()}
+          onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
           haptic="light"
           style={{
             width: 40,
             height: 40,
             borderRadius: 20,
-            backgroundColor: colors.surfaceAlt,
+            backgroundColor: colors.surface,
             alignItems: 'center',
             justifyContent: 'center',
+            borderWidth: 1,
+            borderColor: colors.borderSubtle,
           }}
         >
           <Ionicons name="arrow-back" size={22} color={colors.textPrimary} />
@@ -230,7 +237,7 @@ export function SubscriptionTemplate() {
         <Text
           style={{
             fontSize: 17,
-            fontFamily: 'Satoshi-Black',
+            fontFamily: 'PlusJakartaSans-ExtraBold',
             color: colors.textPrimary,
           }}
         >
@@ -243,7 +250,7 @@ export function SubscriptionTemplate() {
       {loading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <Text style={{ marginTop: 12, fontFamily: 'Satoshi-Medium', color: colors.textSecondary }}>
+          <Text style={{ marginTop: 12, fontFamily: 'PlusJakartaSans-Medium', color: colors.textSecondary }}>
             Cargando estado de la suscripción...
           </Text>
         </View>
@@ -279,7 +286,7 @@ export function SubscriptionTemplate() {
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Ionicons name="shield-checkmark" size={20} color="#F59E0B" />
-                    <Text style={{ fontSize: 18, fontFamily: 'Satoshi-Black', color: colors.textPrimary }}>
+                    <Text style={{ fontSize: 18, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary }}>
                       Yewi Pro Autónomos
                     </Text>
                   </View>
@@ -297,7 +304,7 @@ export function SubscriptionTemplate() {
                     <Text
                       style={{
                         fontSize: 11,
-                        fontFamily: 'Satoshi-Black',
+                        fontFamily: 'PlusJakartaSans-ExtraBold',
                         color: isCancelled ? '#DC2626' : isDark ? '#FDE047' : '#B45309',
                       }}
                     >
@@ -307,29 +314,29 @@ export function SubscriptionTemplate() {
                 </View>
 
                 <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 16 }}>
-                  <Text style={{ fontSize: 32, fontFamily: 'Satoshi-Black', color: isDark ? '#FDE047' : '#C2410C' }}>
-                    9,99 €
+                  <Text style={{ fontSize: 32, fontFamily: 'PlusJakartaSans-ExtraBold', color: isDark ? '#FDE047' : '#C2410C' }}>
+                    {subData?.priceEur ? `${subData.priceEur.toFixed(2).replace('.', ',')} €` : '15,99 €'}
                   </Text>
-                  <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Medium', color: colors.textSecondary, marginLeft: 6 }}>
+                  <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Medium', color: colors.textSecondary, marginLeft: 6 }}>
                     / mes (IVA incluido)
                   </Text>
                 </View>
 
                 <View style={{ borderTopWidth: 1, borderTopColor: isDark ? '#2E2F3A' : '#FED7AA60', paddingTop: 14, gap: 10 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Medium', color: colors.textSecondary }}>
+                    <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Medium', color: colors.textSecondary }}>
                       {isCancelled ? 'Válida hasta:' : 'Próxima renovación:'}
                     </Text>
-                    <Text style={{ fontSize: 13.5, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+                    <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
                       {renewalDate || 'Ciclo activo'}
                     </Text>
                   </View>
 
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Medium', color: colors.textSecondary }}>
+                    <Text style={{ fontSize: 13, fontFamily: 'PlusJakartaSans-Medium', color: colors.textSecondary }}>
                       Método de pago:
                     </Text>
-                    <Text style={{ fontSize: 13.5, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+                    <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
                       {paymentCard}
                     </Text>
                   </View>
@@ -354,7 +361,7 @@ export function SubscriptionTemplate() {
                     {processing ? (
                       <ActivityIndicator color="#FFFFFF" />
                     ) : (
-                      <Text style={{ color: '#FFFFFF', fontSize: 15, fontFamily: 'Satoshi-Bold' }}>
+                      <Text style={{ color: '#FFFFFF', fontSize: 15, fontFamily: 'PlusJakartaSans-Bold' }}>
                         Reanudar Renovación Automática
                       </Text>
                     )}
@@ -374,7 +381,7 @@ export function SubscriptionTemplate() {
                       borderColor: colors.border,
                     }}
                   >
-                    <Text style={{ color: colors.danger, fontSize: 14.5, fontFamily: 'Satoshi-Bold' }}>
+                    <Text style={{ color: colors.danger, fontSize: 14.5, fontFamily: 'PlusJakartaSans-Bold' }}>
                       Cancelar renovación automática
                     </Text>
                   </ThemedTouchable>
@@ -395,7 +402,7 @@ export function SubscriptionTemplate() {
                   }}
                 >
                   <Ionicons name="document-text-outline" size={17} color={colors.textPrimary} />
-                  <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: 'Satoshi-Bold' }}>
+                  <Text style={{ color: colors.textPrimary, fontSize: 14, fontFamily: 'PlusJakartaSans-Bold' }}>
                     Descargar Facturas con IVA (PDF)
                   </Text>
                 </ThemedTouchable>
@@ -403,7 +410,7 @@ export function SubscriptionTemplate() {
 
               {/* Benefits Section */}
               <View style={{ marginTop: 10 }}>
-                <Text style={{ fontSize: 17, fontFamily: 'Satoshi-Black', color: colors.textPrimary, marginBottom: 14 }}>
+                <Text style={{ fontSize: 17, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary, marginBottom: 14 }}>
                   Ventajas Activas en tu Cuenta
                 </Text>
 
@@ -435,10 +442,10 @@ export function SubscriptionTemplate() {
                         <Ionicons name={b.icon} size={20} color={isDark ? '#FDE047' : '#D97706'} />
                       </View>
                       <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 14.5, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+                        <Text style={{ fontSize: 14.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
                           {b.title}
                         </Text>
-                        <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginTop: 2, lineHeight: 18 }}>
+                        <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, marginTop: 2, lineHeight: 18 }}>
                           {b.desc}
                         </Text>
                       </View>
@@ -466,7 +473,7 @@ export function SubscriptionTemplate() {
                 }}
               >
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <Text style={{ fontSize: 20, fontFamily: 'Satoshi-Black', color: colors.textPrimary }}>
+                  <Text style={{ fontSize: 20, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary }}>
                     Plan Yewi Pro
                   </Text>
                   <View
@@ -479,22 +486,22 @@ export function SubscriptionTemplate() {
                       borderColor: '#F59E0B',
                     }}
                   >
-                    <Text style={{ fontSize: 11, fontFamily: 'Satoshi-Black', color: '#B45309' }}>
+                    <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#B45309' }}>
                       RECOMENDADO
                     </Text>
                   </View>
                 </View>
 
                 <View style={{ flexDirection: 'row', alignItems: 'baseline', marginBottom: 10 }}>
-                  <Text style={{ fontSize: 36, fontFamily: 'Satoshi-Black', color: isDark ? '#FDE047' : '#C2410C' }}>
-                    9,99 €
+                  <Text style={{ fontSize: 36, fontFamily: 'PlusJakartaSans-ExtraBold', color: isDark ? '#FDE047' : '#C2410C' }}>
+                    15,99 €
                   </Text>
-                  <Text style={{ fontSize: 13.5, fontFamily: 'Satoshi-Medium', color: colors.textSecondary, marginLeft: 6 }}>
+                  <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans-Medium', color: colors.textSecondary, marginLeft: 6 }}>
                     / mes (IVA incluido)
                   </Text>
                 </View>
 
-                <Text style={{ fontSize: 13.5, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, lineHeight: 20, marginBottom: 20 }}>
+                <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, lineHeight: 20, marginBottom: 20 }}>
                   Consigue clientes directamente en tu ciudad, envía presupuestos ilimitados y multiplica tus ingresos sin pagar comisiones.
                 </Text>
 
@@ -513,20 +520,20 @@ export function SubscriptionTemplate() {
                   {processing ? (
                     <ActivityIndicator color="#FFFFFF" />
                   ) : (
-                    <Text style={{ color: '#FFFFFF', fontSize: 16, fontFamily: 'Satoshi-Bold' }}>
+                    <Text style={{ color: '#FFFFFF', fontSize: 16, fontFamily: 'PlusJakartaSans-Bold' }}>
                       Activar Yewi Pro Ahora
                     </Text>
                   )}
                 </ThemedTouchable>
 
-                <Text style={{ fontSize: 11.5, fontFamily: 'Satoshi-Medium', color: colors.textMuted, textAlign: 'center', marginTop: 10 }}>
+                <Text style={{ fontSize: 11.5, fontFamily: 'PlusJakartaSans-Medium', color: colors.textMuted, textAlign: 'center', marginTop: 10 }}>
                   Sin permanencia · Cancela cuando quieras en 1 toque
                 </Text>
               </View>
 
               {/* Detailed Benefits */}
               <View style={{ gap: 12 }}>
-                <Text style={{ fontSize: 17, fontFamily: 'Satoshi-Black', color: colors.textPrimary, marginBottom: 4 }}>
+                <Text style={{ fontSize: 17, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary, marginBottom: 4 }}>
                   Todo lo que incluye Yewi Pro
                 </Text>
 
@@ -557,10 +564,10 @@ export function SubscriptionTemplate() {
                       <Ionicons name={b.icon} size={20} color={isDark ? '#FDE047' : '#D97706'} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 14.5, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+                      <Text style={{ fontSize: 14.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
                         {b.title}
                       </Text>
-                      <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginTop: 2, lineHeight: 18 }}>
+                      <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Regular', color: colors.textSecondary, marginTop: 2, lineHeight: 18 }}>
                         {b.desc}
                       </Text>
                     </View>

@@ -65,10 +65,10 @@ export const ThemedPressed = React.forwardRef<View, ThemedPressedProps>(
 
           const pressedStyle: ViewStyle = {};
           if (opacityOnPress) {
-            pressedStyle.opacity = 0.85;
+            pressedStyle.opacity = 0.92;
           }
           if (scaleOnPress) {
-            pressedStyle.transform = [{ scale: 0.96 }];
+            pressedStyle.transform = [{ scale: 0.98 }];
           }
 
           return [userStyle, pressedStyle];

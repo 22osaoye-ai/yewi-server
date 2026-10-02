@@ -51,7 +51,7 @@ export function DetailBottomSheet({
       className="relative shadow-2xl"
     >
       {/* SVG Wave Background with Center Crest */}
-      <View style={StyleSheet.absoluteFillObject} className="overflow-hidden">
+      <View style={StyleSheet.absoluteFill} className="overflow-hidden">
         <Svg width={SCREEN_WIDTH} height={sheetHeight}>
           <Path
             d={wavePath}
@@ -75,7 +75,7 @@ export function DetailBottomSheet({
                 haptic="selection"
                 onPress={() => onSelectImage(idx)}
                 className={`w-[66px] h-[66px] rounded-[20px] bg-white/60 items-center justify-center p-1.5 border-[2px] ${
-                  isSelected ? 'border-[#D95B1E] bg-white shadow-sm' : 'border-transparent'
+                  isSelected ? 'border-[#0284C7] bg-white shadow-sm' : 'border-transparent'
                 }`}
               >
                 <Image source={img} className="w-full h-full" resizeMode="contain" />
@@ -86,7 +86,7 @@ export function DetailBottomSheet({
 
         {/* Title & Dimension Chips */}
         <View className="flex-row justify-between items-center mb-2.5">
-          <Text className="text-[21px] font-satoshi-bold text-[#18181B] flex-1 tracking-tight">
+          <Text className="text-[21px] font-sans-bold text-[#18181B] flex-1 tracking-tight">
             {title}
           </Text>
           <View className="flex-row gap-2">
@@ -104,7 +104,7 @@ export function DetailBottomSheet({
                   }`}
                 >
                   <Text
-                    className={`text-xs font-satoshi-bold ${
+                    className={`text-xs font-sans-bold ${
                       isSelected ? 'text-[#18181B]' : 'text-[#8E8E93]'
                     }`}
                   >
@@ -117,23 +117,23 @@ export function DetailBottomSheet({
         </View>
 
         {/* Description Text */}
-        <Text className="text-[13px] leading-5 text-[#6B7280] font-satoshi mb-4">
+        <Text className="text-[13px] leading-5 text-[#6B7280] font-sans mb-4">
           {description}
         </Text>
 
         {/* Action Row Inside the Sheet: Price & Buy Now Button */}
         <View className="flex-row justify-between items-center pt-1">
-          <Text className="text-[26px] font-satoshi-bold text-[#18181B] tracking-tight">
+          <Text className="text-[26px] font-sans-bold text-[#18181B] tracking-tight">
             {price}
           </Text>
           <ThemedPressed
             haptic="medium"
             scaleOnPress
             onPress={onBuyNow}
-            className="bg-[#C87D20] rounded-full px-8 py-3.5 shadow-md elevation-4"
+            className="bg-[#0284C7] rounded-full px-8 py-3.5 shadow-md elevation-4"
           >
-            <Text className="text-white text-[15px] font-satoshi-bold tracking-wide">
-              Buy Now
+            <Text className="text-white text-[15px] font-sans-bold tracking-wide">
+              Comprar
             </Text>
           </ThemedPressed>
         </View>

@@ -6,25 +6,22 @@ import {
   ScrollView,
   RefreshControl,
   ActivityIndicator,
-  Modal,
-  KeyboardAvoidingView,
   Platform,
   useWindowDimensions,
   StyleSheet,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import Svg, { Path } from 'react-native-svg';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { ThemedTouchable } from '@/components/ui/ThemedTouchable';
 import { CustomAlert } from '@/components/ui/CustomAlert';
-import { AuthInput } from '@/components/auth/AuthInput';
-import { CategoryChip } from '@/components/ui/CategoryChip';
-import { CATEGORIES_LIST } from '@/constants/categories';
+import { Badge, Button, Card } from '@/components/ui';
 import { useAppTheme } from '@/hooks/useAppTheme';
-import { useAuthStore } from '@/store/useAuthStore';
+import { useUserRole } from '@/hooks/useUserRole';
 import { leadsApi, ServiceRequestItem } from '@/services/leadsApi';
 import { paymentsApi } from '@/services/paymentsApi';
 import { getAccessToken } from '@/services/apiClient';
@@ -43,20 +40,203 @@ const REQUEST_CATEGORY_ICONS: Record<
   {
     icon: keyof typeof MaterialCommunityIcons.glyphMap;
     accentColor: string;
+    bgColor: string;
   }
 > = {
-  electricidad: { icon: 'lightning-bolt', accentColor: '#EAB308' },
-  fontaneria: { icon: 'water-pump', accentColor: '#0284C7' },
-  pintura: { icon: 'format-paint', accentColor: '#9333EA' },
-  banos: { icon: 'shower', accentColor: '#059669' },
-  cocina: { icon: 'countertop-outline', accentColor: '#EA580C' },
-  climatizacion: { icon: 'air-conditioner', accentColor: '#DC2626' },
-  carpinteria: { icon: 'hammer', accentColor: '#CA8A04' },
-  cerrajeria: { icon: 'key-variant', accentColor: '#4F46E5' },
-  reformas: { icon: 'home-city-outline', accentColor: '#C026D3' },
-  limpieza: { icon: 'broom', accentColor: '#E11D48' },
-  general: { icon: 'toolbox-outline', accentColor: '#F59E0B' },
+  reformas: { icon: 'home-city-outline', accentColor: '#1D4ED8', bgColor: '#DBEAFE' },
+  electricidad: { icon: 'lightning-bolt', accentColor: '#B45309', bgColor: '#FEF3C7' },
+  fontaneria: { icon: 'water-pump', accentColor: '#4338CA', bgColor: '#E0E7FF' },
+  climatizacion: { icon: 'air-conditioner', accentColor: '#0F766E', bgColor: '#CCFBF1' },
+  pintura: { icon: 'format-paint', accentColor: '#7E22CE', bgColor: '#F3E8FF' },
+  banos: { icon: 'shower', accentColor: '#0284C7', bgColor: '#E0F2FE' },
+  cocina: { icon: 'countertop-outline', accentColor: '#EA580C', bgColor: '#FFEDD5' },
+  carpinteria: { icon: 'hammer', accentColor: '#A16207', bgColor: '#FEF9C3' },
+  cerrajeria: { icon: 'key-variant', accentColor: '#6D28D9', bgColor: '#EDE9FE' },
+  limpieza: { icon: 'broom', accentColor: '#047857', bgColor: '#D1FAE5' },
+  suelos: { icon: 'grid', accentColor: '#E11D48', bgColor: '#FFE4E6' },
+  pladur: { icon: 'apps', accentColor: '#334155', bgColor: '#F1F5F9' },
+  general: { icon: 'toolbox-outline', accentColor: '#0284C7', bgColor: '#E0F2FE' },
 };
+
+import { getScoopedCardPath } from '@/components/ui/ScoopedCard';
+
+export const getRequestCardCutoutPath = getScoopedCardPath;
+
+const PROPOSAL_CARD_THEMES: Record<
+  string,
+  {
+    iconName: keyof typeof Ionicons.glyphMap;
+    cardBgLight: string;
+    cardBgDark: string;
+    iconColor: string;
+    haloColor: string;
+    textColor: string;
+  }
+> = {
+  reformas: {
+    iconName: 'construct',
+    cardBgLight: '#BAE6FD',
+    cardBgDark: '#1E3A5F',
+    iconColor: '#1D4ED8',
+    haloColor: 'rgba(255, 255, 255, 0.65)',
+    textColor: '#0F172A',
+  },
+  electricidad: {
+    iconName: 'flash',
+    cardBgLight: '#FDE68A',
+    cardBgDark: '#451A03',
+    iconColor: '#B45309',
+    haloColor: 'rgba(255, 255, 255, 0.65)',
+    textColor: '#0F172A',
+  },
+  fontaneria: {
+    iconName: 'water',
+    cardBgLight: '#C7D2FE',
+    cardBgDark: '#312E81',
+    iconColor: '#4338CA',
+    haloColor: 'rgba(255, 255, 255, 0.65)',
+    textColor: '#0F172A',
+  },
+  climatizacion: {
+    iconName: 'snow',
+    cardBgLight: '#CCFBF1',
+    cardBgDark: '#134E4A',
+    iconColor: '#0F766E',
+    haloColor: 'rgba(255, 255, 255, 0.65)',
+    textColor: '#0F172A',
+  },
+  pintura: {
+    iconName: 'color-palette',
+    cardBgLight: '#F3E8FF',
+    cardBgDark: '#581C87',
+    iconColor: '#7E22CE',
+    haloColor: 'rgba(255, 255, 255, 0.65)',
+    textColor: '#0F172A',
+  },
+  banos: {
+    iconName: 'water-outline',
+    cardBgLight: '#E0F2FE',
+    cardBgDark: '#0C4A6E',
+    iconColor: '#0284C7',
+    haloColor: 'rgba(255, 255, 255, 0.65)',
+    textColor: '#0F172A',
+  },
+  cocina: {
+    iconName: 'restaurant',
+    cardBgLight: '#FFEDD5',
+    cardBgDark: '#7C2D12',
+    iconColor: '#EA580C',
+    haloColor: 'rgba(255, 255, 255, 0.65)',
+    textColor: '#0F172A',
+  },
+  carpinteria: {
+    iconName: 'hammer',
+    cardBgLight: '#FEF9C3',
+    cardBgDark: '#713F12',
+    iconColor: '#A16207',
+    haloColor: 'rgba(255, 255, 255, 0.65)',
+    textColor: '#0F172A',
+  },
+  cerrajeria: {
+    iconName: 'key',
+    cardBgLight: '#EDE9FE',
+    cardBgDark: '#4C1D95',
+    iconColor: '#6D28D9',
+    haloColor: 'rgba(255, 255, 255, 0.65)',
+    textColor: '#0F172A',
+  },
+  limpieza: {
+    iconName: 'sparkles',
+    cardBgLight: '#D1FAE5',
+    cardBgDark: '#064E3B',
+    iconColor: '#047857',
+    haloColor: 'rgba(255, 255, 255, 0.65)',
+    textColor: '#0F172A',
+  },
+  general: {
+    iconName: 'briefcase',
+    cardBgLight: '#E2E8F0',
+    cardBgDark: '#1E293B',
+    iconColor: '#475569',
+    haloColor: 'rgba(255, 255, 255, 0.65)',
+    textColor: '#0F172A',
+  },
+};
+
+const SAMPLE_PROPOSALS = [
+  {
+    id: 'req-1',
+    serviceRequestId: 'req-1',
+    title: 'Reforma Integral de Cocina con Isla',
+    category: 'Reformas',
+    client: {
+      name: 'Carlos Mendoza',
+      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=120&q=80',
+      city: 'Zaragoza',
+    },
+    price: 2800,
+    budget: '2.800 €',
+    date: '14 Sept 2026',
+    status: 'ACCEPTED',
+    statusLabel: 'En progreso',
+    statusColor: '#0284C7',
+    cardBgLight: '#BAE6FD',
+    cardBgDark: '#1E3A5F',
+    iconName: 'construct' as const,
+    iconColor: '#1D4ED8',
+    haloColor: 'rgba(255, 255, 255, 0.65)',
+    textColor: '#0F172A',
+    escrowProtected: true,
+  },
+  {
+    id: 'req-2',
+    serviceRequestId: 'req-2',
+    title: 'Instalación y Boletín Cuadro REBT',
+    category: 'Electricidad',
+    client: {
+      name: 'Elena Gómez',
+      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80',
+      city: 'Zaragoza',
+    },
+    price: 420,
+    budget: '420 €',
+    date: '08 Sept 2026',
+    status: 'ACCEPTED',
+    statusLabel: 'Completada',
+    statusColor: '#059669',
+    cardBgLight: '#FDE68A',
+    cardBgDark: '#451A03',
+    iconName: 'flash' as const,
+    iconColor: '#B45309',
+    haloColor: 'rgba(255, 255, 255, 0.65)',
+    textColor: '#0F172A',
+    escrowProtected: true,
+  },
+  {
+    id: 'req-3',
+    serviceRequestId: 'req-3',
+    title: 'Sustitución Grifería Termostática Ducha',
+    category: 'Fontanería',
+    client: {
+      name: 'Marcos Rivas',
+      avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=120&q=80',
+      city: 'Huesca',
+    },
+    price: 180,
+    budget: '180 €',
+    date: 'Ayer',
+    status: 'PENDING',
+    statusLabel: 'Presupuesto',
+    statusColor: '#D97706',
+    cardBgLight: '#C7D2FE',
+    cardBgDark: '#312E81',
+    iconName: 'water' as const,
+    iconColor: '#4338CA',
+    haloColor: 'rgba(255, 255, 255, 0.65)',
+    textColor: '#0F172A',
+    escrowProtected: false,
+  },
+];
 
 
 const getCategorySlug = (category: any): string => {
@@ -75,54 +255,35 @@ const getCategorySlug = (category: any): string => {
   return 'general';
 };
 
-const getNotchedCardPath = (w: number, h: number) => `
-  M 26 0
-  L ${w - 26} 0
-  A 26 26 0 0 1 ${w} 26
-  L ${w} ${h - 58}
-  Q ${w} ${h - 44} ${w - 14} ${h - 44}
-  L ${w - 36} ${h - 44}
-  Q ${w - 50} ${h - 44} ${w - 50} ${h - 30}
-  Q ${w - 50} ${h} ${w - 64} ${h}
-  L 26 ${h}
-  A 26 26 0 0 1 0 ${h - 26}
-  L 0 26
-  A 26 26 0 0 1 26 0
-  Z
-`;
 
 export function RequestsTemplate() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: SCREEN_WIDTH } = useWindowDimensions();
   const { colors, t, isDark } = useAppTheme();
-  const { user, isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated, isProfessional } = useUserRole();
   const realtimeLeads = useRealtimeStore((state) => state.availableLeads);
   const unseenLeadsCount = useRealtimeStore((state) => state.unseenLeadsCount);
+  const params = useLocalSearchParams<{ create?: string }>();
 
-  const isProfessional = user?.roles?.includes('PROFESSIONAL');
-  const [isPro, setIsPro] = useState<boolean>(user?.isPro === true);
-
-  const fetchProStatus = useCallback(async () => {
-    if (!isAuthenticated) {
-      setIsPro(false);
-      return;
-    }
-    try {
-      const status = await paymentsApi.getSubscriptionStatus();
-      setIsPro(status.isPro === true);
-    } catch {
-      setIsPro(user?.isPro === true);
-    }
-  }, [isAuthenticated, user?.isPro]);
+  // Synchronous role state derived from useUserRole (Escrow model)
+  const [isPro, setIsPro] = useState<boolean>(isProfessional);
 
   useEffect(() => {
-    fetchProStatus();
-  }, [fetchProStatus]);
+    setIsPro(isProfessional);
+  }, [isProfessional]);
 
-  // Tab State: 'my-requests' (Mis Solicitudes) vs 'leads' (Oportunidades) vs 'my-proposals' (Mis Presupuestos)
-  const [activeTab, setActiveTab] = useState<'my-requests' | 'leads' | 'my-proposals'>('my-requests');
+  // Tab State: professionals receive requests ('leads') by default; clients view 'my-requests'
+  const [activeTab, setActiveTab] = useState<'my-requests' | 'leads' | 'my-proposals'>(
+    isProfessional ? 'leads' : 'my-requests'
+  );
   const [proposalFilter, setProposalFilter] = useState<'ALL' | 'ACCEPTED' | 'PENDING' | 'REJECTED'>('ALL');
+
+  useEffect(() => {
+    if (isProfessional && activeTab === 'my-requests') {
+      setActiveTab('leads');
+    }
+  }, [isProfessional, activeTab]);
 
   const [myRequests, setMyRequests] = useState<ServiceRequestItem[]>([]);
   const [availableLeads, setAvailableLeads] = useState<ServiceRequestItem[]>([]);
@@ -130,18 +291,25 @@ export function RequestsTemplate() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-
-  // Publish Modal State
-  const [isPublishModalVisible, setIsPublishModalVisible] = useState<boolean>(false);
-  const [publishStep, setPublishStep] = useState<number>(1);
-  const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState('Electricidad');
-  const [newDescription, setNewDescription] = useState('');
-  const [newBudget, setNewBudget] = useState('');
-  const [newCity, setNewCity] = useState(user?.city || 'Zaragoza');
-  const [newPostalCode, setNewPostalCode] = useState(user?.postalCode || '50001');
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+
+  // Security: If not authenticated, immediately redirect away from requests
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.replace('/auth/login');
+    }
+  }, [isAuthenticated, router]);
+
+  useEffect(() => {
+    if (params.create === 'true') {
+      if (!isAuthenticated) {
+        toast.warning('Autenticación Requerida', 'Debes iniciar sesión para publicar una solicitud.');
+        router.replace('/auth/login');
+        return;
+      }
+      router.push({ pathname: '/publish', params: { type: isProfessional ? 'service' : 'request' } });
+    }
+  }, [params.create, isAuthenticated, isProfessional, router]);
 
   const [alertConfig, setAlertConfig] = useState({
     visible: false,
@@ -205,9 +373,31 @@ export function RequestsTemplate() {
   }, [activeTab, user?.id, isAuthenticated]);
 
   useEffect(() => {
-    setIsLoading(true);
+    AsyncStorage.getItem(STORAGE_MY_REQUESTS)
+      .then((cached) => {
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setMyRequests(parsed);
+              setIsLoading(false);
+            }
+          } catch {}
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (
+      (activeTab === 'my-requests' && myRequests.length === 0) ||
+      (activeTab === 'leads' && availableLeads.length === 0) ||
+      (activeTab === 'my-proposals' && myProposals.length === 0)
+    ) {
+      setIsLoading(true);
+    }
     loadData();
-  }, [loadData]);
+  }, [loadData, activeTab]);
 
   useEffect(() => {
     if (activeTab === 'leads' && realtimeLeads.length > 0) {
@@ -243,89 +433,12 @@ export function RequestsTemplate() {
   };
 
 
-  const handleOpenPublishModal = () => {
-    setPublishStep(1);
-    setNewTitle('');
-    setNewCategory('Electricidad');
-    setNewDescription('');
-    setNewBudget('');
-    setNewCity(user?.city || 'Zaragoza');
-    setNewPostalCode(user?.postalCode || '50001');
-    setIsPublishModalVisible(true);
-  };
-
-  const handleNextPublishStep = () => {
-    if (publishStep === 1) {
-      setPublishStep(2);
-      return;
-    }
-
-    if (publishStep === 2) {
-      if (!newTitle.trim()) {
-        toast.warning('Título Requerido', 'Introduce un título para el trabajo o reforma.');
-        return;
-      }
-      if (!newDescription.trim()) {
-        toast.warning('Descripción Requerida', 'Explica detalladamente lo que necesitas realizar.');
-        return;
-      }
-      setPublishStep(3);
-      return;
-    }
-
-    if (publishStep === 3) {
-      if (!newCity.trim()) {
-        toast.warning('Localidad Requerida', 'Indica la localidad o municipio del trabajo.');
-        return;
-      }
-      handlePublishRequest();
-    }
-  };
-
-  const handlePublishRequest = async () => {
-    setIsSubmitting(true);
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-
-    try {
-      const created = await leadsApi.createRequest({
-        categoryId: newCategory,
-        category: newCategory,
-        title: newTitle.trim(),
-        description: newDescription.trim(),
-        questionnaireAnswers: {},
-        budgetEstimated: newBudget ? parseFloat(newBudget) : undefined,
-        budgetMax: newBudget ? parseFloat(newBudget) : undefined,
-        city: newCity.trim() || user?.city || 'Zaragoza',
-        postalCode: newPostalCode.trim() || user?.postalCode || '50001',
-      });
-
-      if (created) {
-        setIsPublishModalVisible(false);
-        setMyRequests((previous) => {
-          const updated = [
-            created,
-            ...(Array.isArray(previous) ? previous : []).filter((request) => request.id !== created.id),
-          ];
-          AsyncStorage.setItem(STORAGE_MY_REQUESTS, JSON.stringify(updated)).catch(() => {});
-          return updated;
-        });
-        await loadData();
-        toast.success(
-          '¡Solicitud Publicada!',
-          'Los profesionales verificados de tu zona recibirán la solicitud y te enviarán sus presupuestos.'
-        );
-      }
-    } catch (e: any) {
-      toast.error('Error al Publicar', e.message || 'No se pudo publicar la solicitud.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
 
   const filteredProposals = useMemo(() => {
-    if (proposalFilter === 'ALL') return myProposals;
-    return myProposals.filter((p) => p.status === proposalFilter);
+    const proposalsToUse = myProposals.length > 0 ? myProposals : SAMPLE_PROPOSALS;
+    if (proposalFilter === 'ALL') return proposalsToUse;
+    return proposalsToUse.filter((p) => p.status === proposalFilter);
   }, [myProposals, proposalFilter]);
 
   const listData =
@@ -339,223 +452,395 @@ export function RequestsTemplate() {
         : []
       : filteredProposals;
 
+  if (!isAuthenticated) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: colors.background,
+          padding: 24,
+        }}
+      >
+        <Ionicons name="lock-closed-outline" size={56} color={colors.primary} />
+        <Text
+          style={{
+            fontSize: 20,
+            fontFamily: 'PlusJakartaSans-Bold',
+            color: colors.textPrimary,
+            marginTop: 16,
+          }}
+        >
+          Acceso Restringido
+        </Text>
+        <Text
+          style={{
+            fontSize: 14,
+            fontFamily: 'PlusJakartaSans-Regular',
+            color: colors.textSecondary,
+            textAlign: 'center',
+            marginTop: 8,
+            marginBottom: 24,
+          }}
+        >
+          Inicia sesión para gestionar y publicar solicitudes de servicios y proyectos.
+        </Text>
+        <Button onPress={() => router.replace('/auth/login')}>
+          Iniciar Sesión
+        </Button>
+      </View>
+    );
+  }
+
   const paddingTop = Math.max(insets.top + 10, 24);
 
   return (
     <View className="flex-1" style={{ backgroundColor: colors.background }}>
       {/* Header Following Exact Design Convention */}
       <View style={{ backgroundColor: colors.background, paddingHorizontal: 20, paddingTop }}>
-        {/* Top Row: Title + "+ Publicar" Button */}
-        <View className="flex-row justify-between items-center mb-4">
+        {/* Top Row: Title + Action Button (Servicio for pros, Solicitud for clients) */}
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <Text
             style={{
               fontSize: 28,
-              fontFamily: 'Satoshi-Black',
+              fontFamily: 'PlusJakartaSans-ExtraBold',
               color: colors.textPrimary,
-              letterSpacing: -0.5,
+              letterSpacing: -0.6,
             }}
           >
             Solicitudes
           </Text>
 
-          <ThemedTouchable
-            onPress={handleOpenPublishModal}
-            haptic="medium"
-            style={{
-              backgroundColor: colors.primary,
-              borderRadius: 999,
-              paddingHorizontal: 16,
-              paddingVertical: 8,
-              flexDirection: 'row',
-              alignItems: 'center',
-            }}
-          >
-            <Ionicons name="add" size={18} color="#FFFFFF" style={{ marginRight: 4 }} />
-            <Text style={{ color: '#FFFFFF', fontFamily: 'Satoshi-Bold', fontSize: 13.5 }}>
-              Publicar
-            </Text>
-          </ThemedTouchable>
+          {isProfessional ? (
+            <ThemedTouchable
+              onPress={() => router.push({ pathname: '/publish', params: { type: 'service' } })}
+              haptic="medium"
+              style={{
+                backgroundColor: isDark ? '#FFFFFF' : '#09090B',
+                borderRadius: 999,
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}
+            >
+              <Ionicons name="add" size={18} color={isDark ? '#09090B' : '#FFFFFF'} style={{ marginRight: 4 }} />
+              <Text style={{ color: isDark ? '#09090B' : '#FFFFFF', fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 }}>
+                Servicio
+              </Text>
+            </ThemedTouchable>
+          ) : (
+            <ThemedTouchable
+              onPress={() => router.push({ pathname: '/publish', params: { type: 'request' } })}
+              haptic="medium"
+              style={{
+                backgroundColor: isDark ? '#FFFFFF' : '#09090B',
+                borderRadius: 999,
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}
+            >
+              <Ionicons name="add" size={18} color={isDark ? '#09090B' : '#FFFFFF'} style={{ marginRight: 4 }} />
+              <Text style={{ color: isDark ? '#09090B' : '#FFFFFF', fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 }}>
+                Solicitud
+              </Text>
+            </ThemedTouchable>
+          )}
         </View>
 
-        {/* Subtab Bar: Mis Solicitudes vs Oportunidades vs Mis Presupuestos */}
+        {/* Subtab Bar: Differentiated by Role */}
         <View style={{ borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center' }}>
-            {/* Tab 1: Mis Solicitudes */}
-            <ThemedTouchable
-              onPress={() => {
-                setActiveTab('my-requests');
-                Haptics.selectionAsync().catch(() => {});
-              }}
-              haptic="selection"
-              className="pb-3 pt-1 mr-6 relative"
-            >
-              <Text
-                style={{
-                  fontSize: 15.5,
-                  fontFamily: activeTab === 'my-requests' ? 'Satoshi-Black' : 'Satoshi-Bold',
-                  color: activeTab === 'my-requests' ? colors.textPrimary : colors.textMuted,
-                }}
-              >
-                Mis Solicitudes
-              </Text>
-              {activeTab === 'my-requests' && (
-                <View
-                  style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: 2.5,
-                    borderRadius: 2,
-                    backgroundColor: colors.textPrimary,
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ marginHorizontal: -20 }}
+            contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 }}
+          >
+            {isProfessional ? (
+              <>
+                {/* Pro Tab 1: Recibidas */}
+                <ThemedTouchable
+                  onPress={() => {
+                    setActiveTab('leads');
+                    useRealtimeStore.getState().markLeadsAsSeen();
+                    Haptics.selectionAsync().catch(() => {});
                   }}
-                />
-              )}
-            </ThemedTouchable>
-
-            {/* Tab 2: Oportunidades */}
-            <ThemedTouchable
-              onPress={() => {
-                setActiveTab('leads');
-                useRealtimeStore.getState().markLeadsAsSeen();
-                Haptics.selectionAsync().catch(() => {});
-              }}
-              haptic="selection"
-              className="pb-3 pt-1 mr-6 relative"
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                <Text
-                  style={{
-                    fontSize: 15.5,
-                    fontFamily: activeTab === 'leads' ? 'Satoshi-Black' : 'Satoshi-Bold',
-                    color: activeTab === 'leads' ? colors.textPrimary : colors.textMuted,
-                  }}
+                  haptic="selection"
+                  className="pb-3 pt-1 mr-6 relative"
                 >
-                  Oportunidades {isProfessional ? '★' : ''}
-                </Text>
-                {unseenLeadsCount > 0 && (
-                  <View
-                    style={{
-                      backgroundColor: '#EF4444',
-                      borderRadius: 10,
-                      paddingHorizontal: 6,
-                      paddingVertical: 1,
-                    }}
-                  >
-                    <Text style={{ fontSize: 10, fontFamily: 'Satoshi-Black', color: '#FFFFFF' }}>
-                      {unseenLeadsCount > 99 ? '99+' : unseenLeadsCount}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <Text
+                      style={{
+                        fontSize: 15.5,
+                        fontFamily: activeTab === 'leads' ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-Bold',
+                        color: activeTab === 'leads' ? colors.textPrimary : colors.textMuted,
+                      }}
+                    >
+                      Recibidas
                     </Text>
+                    {unseenLeadsCount > 0 && (
+                      <View
+                        style={{
+                          backgroundColor: '#EF4444',
+                          borderRadius: 10,
+                          paddingHorizontal: 6,
+                          paddingVertical: 1,
+                        }}
+                      >
+                        <Text style={{ fontSize: 10, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#FFFFFF' }}>
+                          {unseenLeadsCount > 99 ? '99+' : unseenLeadsCount}
+                        </Text>
+                      </View>
+                    )}
                   </View>
-                )}
-              </View>
-              {activeTab === 'leads' && (
-                <View
-                  style={{
-                    position: 'absolute',
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    height: 2.5,
-                    borderRadius: 2,
-                    backgroundColor: colors.textPrimary,
-                  }}
-                />
-              )}
-            </ThemedTouchable>
+                  {activeTab === 'leads' && (
+                    <View
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        height: 2.5,
+                        borderRadius: 2,
+                        backgroundColor: colors.textPrimary,
+                      }}
+                    />
+                  )}
+                </ThemedTouchable>
 
-            {/* Tab 3: Mis Presupuestos (Sellers) */}
-            {isProfessional && (
-              <ThemedTouchable
-                onPress={() => {
-                  setActiveTab('my-proposals');
-                  Haptics.selectionAsync().catch(() => {});
-                }}
-                haptic="selection"
-                className="pb-3 pt-1 relative"
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                {/* Pro Tab 2: Presupuestos */}
+                <ThemedTouchable
+                  onPress={() => {
+                    setActiveTab('my-proposals');
+                    Haptics.selectionAsync().catch(() => {});
+                  }}
+                  haptic="selection"
+                  className="pb-3 pt-1 mr-6 relative"
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text
+                      style={{
+                        fontSize: 15.5,
+                        fontFamily: activeTab === 'my-proposals' ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-Bold',
+                        color: activeTab === 'my-proposals' ? colors.textPrimary : colors.textMuted,
+                      }}
+                    >
+                      Presupuestos
+                    </Text>
+                    {((myProposals.length > 0 ? myProposals : SAMPLE_PROPOSALS).filter((p) => p.status === 'ACCEPTED').length > 0) && (
+                      <View
+                        style={{
+                          backgroundColor: '#10B981',
+                          borderRadius: 10,
+                          paddingHorizontal: 6,
+                          paddingVertical: 1,
+                        }}
+                      >
+                        <Text style={{ fontSize: 10, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#FFFFFF' }}>
+                          {(myProposals.length > 0 ? myProposals : SAMPLE_PROPOSALS).filter((p) => p.status === 'ACCEPTED').length}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  {activeTab === 'my-proposals' && (
+                    <View
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        height: 2.5,
+                        borderRadius: 2,
+                        backgroundColor: colors.textPrimary,
+                      }}
+                    />
+                  )}
+                </ThemedTouchable>
+              </>
+            ) : (
+              <>
+                {/* Client Tab 1: Mis Solicitudes */}
+                <ThemedTouchable
+                  onPress={() => {
+                    setActiveTab('my-requests');
+                    Haptics.selectionAsync().catch(() => {});
+                  }}
+                  haptic="selection"
+                  className="pb-3 pt-1 mr-6 relative"
+                >
                   <Text
                     style={{
                       fontSize: 15.5,
-                      fontFamily: activeTab === 'my-proposals' ? 'Satoshi-Black' : 'Satoshi-Bold',
-                      color: activeTab === 'my-proposals' ? colors.textPrimary : colors.textMuted,
+                      fontFamily: activeTab === 'my-requests' ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-Bold',
+                      color: activeTab === 'my-requests' ? colors.textPrimary : colors.textMuted,
                     }}
                   >
-                    Mis Presupuestos
+                    Mis Solicitudes
                   </Text>
-                  {myProposals.filter((p) => p.status === 'ACCEPTED').length > 0 && (
+                  {activeTab === 'my-requests' && (
                     <View
                       style={{
-                        backgroundColor: '#10B981',
-                        borderRadius: 10,
-                        paddingHorizontal: 6,
-                        paddingVertical: 1,
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        height: 2.5,
+                        borderRadius: 2,
+                        backgroundColor: colors.textPrimary,
+                      }}
+                    />
+                  )}
+                </ThemedTouchable>
+
+                {/* Client Tab 2: Disponibles */}
+                <ThemedTouchable
+                  onPress={() => {
+                    setActiveTab('leads');
+                    useRealtimeStore.getState().markLeadsAsSeen();
+                    Haptics.selectionAsync().catch(() => {});
+                  }}
+                  haptic="selection"
+                  className="pb-3 pt-1 mr-6 relative"
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                    <Text
+                      style={{
+                        fontSize: 15.5,
+                        fontFamily: activeTab === 'leads' ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-Bold',
+                        color: activeTab === 'leads' ? colors.textPrimary : colors.textMuted,
                       }}
                     >
-                      <Text style={{ fontSize: 10, fontFamily: 'Satoshi-Black', color: '#FFFFFF' }}>
-                        {myProposals.filter((p) => p.status === 'ACCEPTED').length}
-                      </Text>
-                    </View>
+                      Disponibles
+                    </Text>
+                    {unseenLeadsCount > 0 && (
+                      <View
+                        style={{
+                          backgroundColor: '#EF4444',
+                          borderRadius: 10,
+                          paddingHorizontal: 6,
+                          paddingVertical: 1,
+                        }}
+                      >
+                        <Text style={{ fontSize: 10, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#FFFFFF' }}>
+                          {unseenLeadsCount > 99 ? '99+' : unseenLeadsCount}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  {activeTab === 'leads' && (
+                    <View
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        height: 2.5,
+                        borderRadius: 2,
+                        backgroundColor: colors.textPrimary,
+                      }}
+                    />
                   )}
-                </View>
-                {activeTab === 'my-proposals' && (
-                  <View
-                    style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      height: 2.5,
-                      borderRadius: 2,
-                      backgroundColor: colors.textPrimary,
-                    }}
-                  />
-                )}
-              </ThemedTouchable>
+                </ThemedTouchable>
+
+                {/* Client Tab 3: Presupuestos */}
+                <ThemedTouchable
+                  onPress={() => {
+                    setActiveTab('my-proposals');
+                    Haptics.selectionAsync().catch(() => {});
+                  }}
+                  haptic="selection"
+                  className="pb-3 pt-1 relative"
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text
+                      style={{
+                        fontSize: 15.5,
+                        fontFamily: activeTab === 'my-proposals' ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-Bold',
+                        color: activeTab === 'my-proposals' ? colors.textPrimary : colors.textMuted,
+                      }}
+                    >
+                      Presupuestos
+                    </Text>
+                  </View>
+                  {activeTab === 'my-proposals' && (
+                    <View
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        height: 2.5,
+                        borderRadius: 2,
+                        backgroundColor: colors.textPrimary,
+                      }}
+                    />
+                  )}
+                </ThemedTouchable>
+              </>
             )}
           </ScrollView>
         </View>
 
-        {/* Filter Pills when in 'my-proposals' */}
+        {/* Filter Pills when in 'my-proposals' (Bleeds edge-to-edge without padding clipping) */}
         {activeTab === 'my-proposals' && (
-          <View style={{ flexDirection: 'row', gap: 8, paddingTop: 12, paddingBottom: 4 }}>
-            {[
-              { id: 'ALL', label: `Todos (${myProposals.length})` },
-              { id: 'ACCEPTED', label: `Aceptados ✓ (${myProposals.filter((p) => p.status === 'ACCEPTED').length})` },
-              { id: 'PENDING', label: `Pendientes (${myProposals.filter((p) => p.status === 'PENDING').length})` },
-              { id: 'REJECTED', label: `Rechazados (${myProposals.filter((p) => p.status === 'REJECTED').length})` },
-            ].map((f) => (
-              <ThemedTouchable
-                key={f.id}
-                onPress={() => {
-                  setProposalFilter(f.id as any);
-                  Haptics.selectionAsync().catch(() => {});
-                }}
-                haptic="selection"
-                style={{
-                  paddingHorizontal: 12,
-                  paddingVertical: 5,
-                  borderRadius: 999,
-                  backgroundColor:
-                    proposalFilter === f.id
-                      ? colors.primary
-                      : isDark
-                      ? '#202532'
-                      : '#F1F5F9',
-                }}
-              >
-                <Text
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ marginHorizontal: -20 }}
+            contentContainerStyle={{ flexDirection: 'row', gap: 8, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 6 }}
+          >
+            {(() => {
+              const currentProposals = myProposals.length > 0 ? myProposals : SAMPLE_PROPOSALS;
+              return [
+                { id: 'ALL', label: `Todos (${currentProposals.length})` },
+                { id: 'ACCEPTED', label: `Aceptados (${currentProposals.filter((p) => p.status === 'ACCEPTED').length})` },
+                { id: 'PENDING', label: `Pendientes (${currentProposals.filter((p) => p.status === 'PENDING').length})` },
+                { id: 'REJECTED', label: `Rechazados (${currentProposals.filter((p) => p.status === 'REJECTED').length})` },
+              ].map((f) => {
+                const isSelected = proposalFilter === f.id;
+                const bg = isSelected ? (isDark ? '#FFFFFF' : '#09090B') : (isDark ? '#1E293B' : '#F4F4F5');
+                const border = isSelected ? (isDark ? '#FFFFFF' : '#09090B') : (isDark ? 'rgba(255, 255, 255, 0.08)' : '#E4E4E7');
+                const textColor = isSelected ? (isDark ? '#09090B' : '#FFFFFF') : (isDark ? '#94A3B8' : '#52525B');
+
+              return (
+                <ThemedTouchable
+                  key={f.id}
+                  onPress={() => {
+                    setProposalFilter(f.id as any);
+                    Haptics.selectionAsync().catch(() => {});
+                  }}
+                  haptic="selection"
+                  hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
                   style={{
-                    fontSize: 12,
-                    fontFamily: 'Satoshi-Bold',
-                    color: proposalFilter === f.id ? '#FFFFFF' : colors.textSecondary,
+                    minHeight: 36,
+                    paddingHorizontal: 15,
+                    paddingVertical: 7,
+                    borderRadius: 999,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: bg,
+                    borderWidth: 1,
+                    borderColor: border,
                   }}
                 >
-                  {f.label}
-                </Text>
-              </ThemedTouchable>
-            ))}
-          </View>
+                  <Text
+                    style={{
+                      fontSize: 12.5,
+                      fontFamily: isSelected ? 'PlusJakartaSans-Bold' : 'PlusJakartaSans-Medium',
+                      color: textColor,
+                      letterSpacing: -0.2,
+                    }}
+                  >
+                    {f.label}
+                  </Text>
+                </ThemedTouchable>
+              );
+            });
+          })()}
+          </ScrollView>
         )}
       </View>
 
@@ -593,39 +878,56 @@ export function RequestsTemplate() {
             flexGrow: 1,
           }}
           ListHeaderComponent={
-            activeTab === 'leads' && !isPro ? (
-              <View key="leads-promo-header" style={{ marginBottom: 14 }}>
-                <HomePromoBanner
-                  ad={{
-                    id: isProfessional ? 'pro-active-banner' : 'become-seller',
-                    variant: 'seller',
-                    badge: isProfessional ? 'PLAN PROFESIONAL' : 'MODO PROFESIONAL',
-                    title: isProfessional
-                      ? 'Hazte Yewi Pro (9,99 €/mes)'
-                      : 'Conviértete en Seller',
-                    description: isProfessional
-                      ? 'Recibe solicitudes antes, contacto directo sin comisiones y cobertura nacional.'
-                      : 'Recibe solicitudes de clientes en tu zona, envía presupuestos y haz crecer tu negocio.',
-                    ctaText: isProfessional ? 'Ver ventajas' : 'Activar Seller',
-                    discountBadge: isProfessional ? 'PRO' : 'SELLER',
+            activeTab === 'leads' ? (
+              <View key="leads-escrow-header" style={{ marginBottom: 14 }}>
+                <View
+                  style={{
+                    backgroundColor: isDark ? 'rgba(5, 150, 105, 0.12)' : 'rgba(5, 150, 105, 0.08)',
+                    borderColor: isDark ? 'rgba(5, 150, 105, 0.28)' : 'rgba(5, 150, 105, 0.22)',
+                    borderWidth: 1,
+                    borderRadius: 16,
+                    padding: 14,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
                   }}
-                  onPress={() => {
-                    if (isProfessional) {
-                      router.push('/subscription');
-                    } else {
-                      router.push('/professional-profile');
-                    }
-                  }}
-                  onCtaPress={() => {
-                    if (isProfessional) {
-                      router.push('/subscription');
-                    } else {
-                      router.push('/professional-profile');
-                    }
-                  }}
-                />
+                >
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 18,
+                      backgroundColor: '#059669',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Ionicons name="shield-checkmark" size={18} color="#FFFFFF" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text
+                      style={{
+                        fontSize: 13.5,
+                        fontFamily: 'PlusJakartaSans-Bold',
+                        color: isDark ? '#34D399' : '#065F46',
+                      }}
+                    >
+                      Presupuestos Libres y Cobro Seguro
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 12,
+                        fontFamily: 'PlusJakartaSans-Medium',
+                        color: colors.textSecondary,
+                        marginTop: 2,
+                      }}
+                    >
+                      Envía ofertas gratis. Fondos custodiados en Escrow con 15% de comisión solo al finalizar.
+                    </Text>
+                  </View>
+                </View>
               </View>
-            ) : undefined
+            ) : null
           }
 
           ListEmptyComponent={() => (
@@ -653,7 +955,7 @@ export function RequestsTemplate() {
                   color={colors.primary}
                 />
               </View>
-              <Text style={{ fontSize: 18, fontFamily: 'Satoshi-Black', color: colors.textPrimary, marginBottom: 8, textAlign: 'center' }}>
+              <Text style={{ fontSize: 18, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary, marginBottom: 8, textAlign: 'center' }}>
                 {activeTab === 'my-requests'
                   ? t.noRequestsTitle
                   : activeTab === 'my-proposals'
@@ -663,7 +965,7 @@ export function RequestsTemplate() {
               <Text
                 style={{
                   fontSize: 14,
-                  fontFamily: 'Satoshi-Regular',
+                  fontFamily: 'PlusJakartaSans-Regular',
                   color: colors.textSecondary,
                   textAlign: 'center',
                   marginBottom: 20,
@@ -677,21 +979,14 @@ export function RequestsTemplate() {
                   ? 'Cuando envíes propuestas a solicitudes de clientes, aparecerán aquí para su seguimiento y chat privado.'
                   : t.noLeadsDesc}
               </Text>
-              {activeTab === 'my-requests' && (
-                <ThemedTouchable
-                  onPress={handleOpenPublishModal}
-                  haptic="medium"
-                  style={{
-                    backgroundColor: colors.primary,
-                    borderRadius: 999,
-                    paddingHorizontal: 22,
-                    paddingVertical: 12,
-                  }}
-                >
-                  <Text style={{ color: '#FFFFFF', fontFamily: 'Satoshi-Bold', fontSize: 14 }}>
-                    Publicar Primera Solicitud
-                  </Text>
-                </ThemedTouchable>
+              {activeTab === 'my-requests' && !isProfessional && (
+                <Button
+                  title="Nueva Solicitud"
+                  variant="primary"
+                  size="md"
+                  iconLeft="add"
+                  onPress={() => router.push({ pathname: '/publish', params: { type: 'request' } })}
+                />
               )}
             </View>
           )}
@@ -700,168 +995,269 @@ export function RequestsTemplate() {
               const prop = item;
               const isAccepted = prop.status === 'ACCEPTED';
               const isRejected = prop.status === 'REJECTED';
-              const reqTitle = prop.serviceRequest?.title || 'Solicitud de servicio';
-              const reqCity = prop.serviceRequest?.city || 'Zaragoza';
-              const catName = prop.serviceRequest?.category?.name || 'General';
+              const reqTitle = prop.title || prop.serviceRequest?.title || 'Solicitud de servicio';
+              const reqCity = prop.client?.city || prop.serviceRequest?.city || 'Zaragoza';
+              const catName = prop.category || prop.serviceRequest?.category?.name || 'General';
               const catSlug = getCategorySlug(catName);
-              const theme = REQUEST_CATEGORY_ICONS[catSlug] || REQUEST_CATEGORY_ICONS.general;
+              const fallbackTheme = PROPOSAL_CARD_THEMES[catSlug] || PROPOSAL_CARD_THEMES.general;
 
-              const statusBadgeBg = isAccepted
-                ? isDark
-                  ? '#064E3B'
-                  : '#D1FAE5'
-                : isRejected
-                ? isDark
-                  ? '#450A0A'
-                  : '#FEE2E2'
-                : isDark
-                ? '#451A03'
-                : '#FEF3C7';
+              const cardBgLight = prop.cardBgLight || fallbackTheme.cardBgLight;
+              const cardBgDark = prop.cardBgDark || fallbackTheme.cardBgDark;
+              const iconName = prop.iconName || fallbackTheme.iconName;
+              const iconColor = prop.iconColor || fallbackTheme.iconColor;
+              const haloColor = prop.haloColor || fallbackTheme.haloColor;
+              const textColor = prop.textColor || fallbackTheme.textColor;
 
-              const statusBadgeText = isAccepted
-                ? '#10B981'
-                : isRejected
-                ? '#EF4444'
-                : '#F59E0B';
+              const statusLabel = prop.statusLabel || (isAccepted ? 'Aceptado' : isRejected ? 'Rechazado' : 'Pendiente');
+              const statusColor = prop.statusColor || (isAccepted ? '#059669' : isRejected ? '#E11D48' : '#D97706');
 
-              const statusBadgeLabel = isAccepted
-                ? 'Aceptado ✓'
-                : isRejected
-                ? 'Rechazado'
-                : 'Pendiente';
+              const clientName = prop.client?.name || prop.serviceRequest?.client?.name || 'Cliente';
+              const clientAvatar = prop.client?.avatar || prop.clientAvatar || prop.serviceRequest?.client?.avatar;
+              const priceDisplay = prop.budget || (prop.price ? `${prop.price} €` : 'A convenir');
+              const dateDisplay = prop.date || (prop.createdAt ? new Date(prop.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) : 'Hoy');
+              const escrowProtected = prop.escrowProtected !== undefined ? prop.escrowProtected : true;
+
+              const REQUEST_CARD_HEIGHT = 185;
+              const itemCardWidth = Math.min(SCREEN_WIDTH - 36, 500);
 
               return (
-                <View
+                <ThemedTouchable
+                  key={prop.id}
+                  onPress={() => {
+                    if (isAccepted && (prop.order?.id || prop.conversationId)) {
+                      router.push({
+                        pathname: '/chat',
+                        params: {
+                          orderId: prop.order?.id,
+                          requestId: prop.serviceRequestId || prop.id,
+                          conversationId: prop.conversationId || '',
+                          targetName: clientName,
+                        },
+                      });
+                    } else {
+                      router.push({
+                        pathname: '/request-detail',
+                        params: { id: prop.serviceRequestId || prop.id },
+                      });
+                    }
+                  }}
+                  haptic="light"
+                  activeOpacity={0.92}
                   style={{
-                    backgroundColor: isDark ? '#161922' : '#FFFFFF',
-                    borderRadius: 20,
-                    padding: 18,
-                    marginBottom: 14,
-                    borderWidth: 1,
-                    borderColor: isDark ? '#222734' : '#E2E8F0',
+                    width: itemCardWidth,
+                    height: REQUEST_CARD_HEIGHT,
+                    marginBottom: 16,
+                    position: 'relative',
                     shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: isDark ? 0.2 : 0.05,
-                    shadowRadius: 6,
-                    elevation: 2,
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.08,
+                    shadowRadius: 10,
+                    elevation: 3,
+                    alignSelf: 'center',
                   }}
                 >
-                  {/* Top Row: Category + Status Badge */}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <MaterialCommunityIcons name={theme.icon} size={18} color={theme.accentColor} />
-                      <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Bold', color: colors.textSecondary }}>
-                        {catName} · {reqCity}
-                      </Text>
+                  {/* Scooped Cutout Background Shape */}
+                  <Svg
+                    width={itemCardWidth}
+                    height={REQUEST_CARD_HEIGHT}
+                    viewBox={`0 0 ${itemCardWidth} ${REQUEST_CARD_HEIGHT}`}
+                    style={StyleSheet.absoluteFill}
+                  >
+                    <Path
+                      d={getRequestCardCutoutPath(itemCardWidth, REQUEST_CARD_HEIGHT)}
+                      fill={isDark ? '#1C1E26' : cardBgLight}
+                      stroke={isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)'}
+                      strokeWidth="1"
+                    />
+                  </Svg>
+
+                  {/* Top Area: Category Icon in Halo + Date + Elevated Status Badge */}
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      paddingHorizontal: 16,
+                      paddingTop: 16,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                      <View
+                        style={{
+                          width: 42,
+                          height: 42,
+                          borderRadius: 21,
+                          backgroundColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.85)',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderWidth: 1,
+                          borderColor: isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(255, 255, 255, 0.95)',
+                          shadowColor: '#000',
+                          shadowOffset: { width: 0, height: 1 },
+                          shadowOpacity: 0.04,
+                          shadowRadius: 2,
+                        }}
+                      >
+                        <Ionicons name={iconName as any} size={20} color={iconColor} />
+                      </View>
+                      <View>
+                        <Text style={{ fontSize: 13.5, fontFamily: 'PlusJakartaSans-Bold', color: isDark ? '#FFFFFF' : textColor }}>
+                          {catName}
+                        </Text>
+                        <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans-Medium', color: isDark ? '#94A3B8' : '#475569', marginTop: 1 }}>
+                          {dateDisplay} · {reqCity}
+                        </Text>
+                      </View>
                     </View>
 
-                    <View style={{ backgroundColor: statusBadgeBg, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 }}>
-                      <Text style={{ fontSize: 12, fontFamily: 'Satoshi-Black', color: statusBadgeText }}>
-                        {statusBadgeLabel}
+                    {/* Elevated Status Pill Badge */}
+                    <View
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 5,
+                        borderRadius: 999,
+                        backgroundColor: isDark ? '#27272A' : '#FFFFFF',
+                        borderWidth: 1,
+                        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+                        shadowColor: '#000',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.08,
+                        shadowRadius: 4,
+                        elevation: 3,
+                      }}
+                    >
+                      <Text style={{ fontSize: 11, fontFamily: 'PlusJakartaSans-ExtraBold', color: statusColor }}>
+                        {statusLabel}
                       </Text>
                     </View>
                   </View>
 
-                  {/* Title & Price */}
-                  <ThemedTouchable
-                    onPress={() => router.push({ pathname: '/request-detail', params: { id: prop.serviceRequestId } })}
-                    haptic="light"
-                  >
-                    <Text numberOfLines={1} style={{ fontSize: 17, fontFamily: 'Satoshi-Black', color: colors.textPrimary, marginBottom: 6 }}>
-                      {reqTitle}
-                    </Text>
-
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-                      <Text style={{ fontSize: 20, fontFamily: 'Satoshi-Black', color: colors.primary }}>
-                        {prop.price} €
-                      </Text>
-                      <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Medium', color: colors.textMuted }}>
-                        Plazo: {prop.estimatedDays || 3} días
-                      </Text>
-                    </View>
-
-                    {Boolean(prop.message) && (
-                      <Text numberOfLines={2} style={{ fontSize: 13, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginBottom: 12, lineHeight: 18 }}>
-                        {prop.message}
-                      </Text>
-                    )}
-                  </ThemedTouchable>
-
-                  {/* Client & Actions Row (Especially for Accepted Proposals) */}
-                  {isAccepted && (
-                    <View
+                  {/* Title */}
+                  <View style={{ paddingHorizontal: 16, paddingTop: 10 }}>
+                    <Text
+                      numberOfLines={2}
                       style={{
-                        paddingTop: 12,
-                        marginTop: 4,
-                        borderTopWidth: 1,
-                        borderTopColor: isDark ? '#222734' : '#F1F5F9',
+                        fontSize: 15.5,
+                        fontFamily: 'PlusJakartaSans-ExtraBold',
+                        color: isDark ? '#FFFFFF' : textColor,
+                        lineHeight: 21,
                       }}
                     >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                          <View
-                            style={{
-                              width: 32,
-                              height: 32,
-                              borderRadius: 16,
-                              backgroundColor: colors.primaryLight,
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                          >
-                            <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Black', color: colors.primary }}>
-                              {prop.client?.name ? prop.client.name.charAt(0).toUpperCase() : 'C'}
-                            </Text>
-                          </View>
-                          <View>
-                            <Text style={{ fontSize: 13.5, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
-                              {prop.client?.name || 'Cliente'}
-                            </Text>
-                            <Text style={{ fontSize: 11.5, fontFamily: 'Satoshi-Medium', color: colors.textMuted }}>
-                              {prop.client?.city || reqCity}
-                            </Text>
-                          </View>
-                        </View>
+                      {reqTitle}
+                    </Text>
+                  </View>
 
-                        <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
-                          <Text style={{ fontSize: 11, fontFamily: 'Satoshi-Bold', color: '#1D4ED8' }}>
-                            Presupuesto Aceptado ✓
-                          </Text>
-                        </View>
-                      </View>
+                  {/* Bottom Row inside the Cutout & Docked: */}
+                  {/* 1. Client Avatar nestled inside Cutout Hole */}
+                  <View
+                    style={{
+                      position: 'absolute',
+                      left: 8,
+                      bottom: 8,
+                      width: 44,
+                      height: 44,
+                      borderRadius: 22,
+                      backgroundColor: isDark ? '#27272A' : '#FFFFFF',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden',
+                      borderWidth: 2,
+                      borderColor: isDark ? '#27272A' : '#FFFFFF',
+                      shadowColor: '#000000',
+                      shadowOffset: { width: 0, height: 3 },
+                      shadowOpacity: 0.16,
+                      shadowRadius: 4,
+                      elevation: 4,
+                      zIndex: 10,
+                    }}
+                  >
+                    {clientAvatar ? (
+                      <Image
+                        source={{ uri: clientAvatar }}
+                        style={{ width: 44, height: 44 }}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                      />
+                    ) : (
+                      <Text style={{ fontSize: 15, fontFamily: 'PlusJakartaSans-ExtraBold', color: iconColor }}>
+                        {clientName.charAt(0).toUpperCase()}
+                      </Text>
+                    )}
+                  </View>
 
-                      {/* Open Chat Button */}
-                      <ThemedTouchable
-                        onPress={() =>
-                          router.push({
-                            pathname: '/chat',
-                            params: {
-                              orderId: prop.order?.id,
-                              requestId: prop.serviceRequestId,
-                              conversationId: prop.conversationId || '',
-                              targetName: prop.client?.name,
-                            },
-                          })
-                        }
-                        haptic="medium"
-                        style={{
-                          backgroundColor: colors.primary,
-                          borderRadius: 12,
-                          paddingVertical: 10,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexDirection: 'row',
-                          gap: 6,
-                        }}
-                      >
-                        <Ionicons name="chatbubbles" size={17} color="#FFFFFF" />
-                        <Text style={{ fontSize: 13.5, fontFamily: 'Satoshi-Bold', color: '#FFFFFF' }}>
-                          Abrir Chat Privado con el Cliente
-                        </Text>
-                      </ThemedTouchable>
-                    </View>
-                  )}
-                </View>
+                  {/* 2. Client Name docked into adjacent Pill */}
+                  <View
+                    style={{
+                      position: 'absolute',
+                      left: 58,
+                      bottom: 8,
+                      height: 44,
+                      maxWidth: itemCardWidth - 58 - 120,
+                      borderRadius: 22,
+                      backgroundColor: isDark ? '#27272A' : '#FFFFFF',
+                      borderWidth: 1,
+                      borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+                      justifyContent: 'center',
+                      paddingHorizontal: 16,
+                      zIndex: 10,
+                      shadowColor: '#000000',
+                      shadowOpacity: 0.08,
+                      shadowRadius: 5,
+                      shadowOffset: { width: 0, height: 2 },
+                      elevation: 3,
+                    }}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        fontSize: 13,
+                        fontFamily: 'PlusJakartaSans-Bold',
+                        color: isDark ? '#F8FAFC' : '#0F172A',
+                        letterSpacing: -0.2,
+                      }}
+                    >
+                      {clientName}
+                    </Text>
+                  </View>
+
+                  {/* 3. Budget Pill on the Right */}
+                  <View
+                    style={{
+                      position: 'absolute',
+                      right: 10,
+                      bottom: 8,
+                      height: 44,
+                      borderRadius: 22,
+                      backgroundColor: isDark ? '#27272A' : '#FFFFFF',
+                      borderWidth: 1,
+                      borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingHorizontal: 14,
+                      gap: 6,
+                      zIndex: 10,
+                      shadowColor: '#000000',
+                      shadowOffset: { width: 0, height: 2 },
+                      shadowOpacity: 0.08,
+                      shadowRadius: 4,
+                      elevation: 3,
+                    }}
+                  >
+                    {escrowProtected && (
+                      <Ionicons name="shield-checkmark" size={14} color="#059669" />
+                    )}
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        fontSize: 12.5,
+                        fontFamily: 'PlusJakartaSans-ExtraBold',
+                        color: '#059669',
+                      }}
+                    >
+                      {priceDisplay}
+                    </Text>
+                  </View>
+                </ThemedTouchable>
               );
             }
 
@@ -900,128 +1296,150 @@ export function RequestsTemplate() {
                 activeOpacity={0.92}
                 style={{
                   width: cardWidth,
-                  height: cardHeight,
-                  position: 'relative',
+                  backgroundColor: colors.surface,
+                  borderRadius: 20,
+                  borderWidth: 1,
+                  borderColor: colors.borderSubtle,
+                  padding: 18,
                   shadowColor: '#000',
-                  shadowOffset: { width: 0, height: 3 },
-                  shadowOpacity: isDark ? 0.3 : 0.06,
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: isDark ? 0.2 : 0.04,
                   shadowRadius: 8,
-                  elevation: 3,
+                  elevation: 2,
                 }}
               >
-                <Svg width={cardWidth} height={cardHeight} style={StyleSheet.absoluteFill}>
-                  <Path d={getNotchedCardPath(cardWidth, cardHeight)} fill={cardBg} stroke={cardBorder} strokeWidth={1} />
-                </Svg>
-
-                <View
-                  style={{
-                    flexDirection: 'row',
-                    padding: 12,
-                    height: '100%',
-                    alignItems: 'center',
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 82,
-                      height: 114,
-                      borderRadius: 18,
-                      backgroundColor: boxBg,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      marginRight: 14,
-                      borderWidth: 1,
-                      borderColor: isDark ? '#282F40' : '#E2E8F0',
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name={theme.icon}
-                      size={36}
-                      color={theme.accentColor}
-                    />
+                {/* Top Row: Category icon & name + City & Badge */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 10,
+                        backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : (theme.bgColor || '#F1F5F9'),
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <MaterialCommunityIcons
+                        name={theme.icon}
+                        size={17}
+                        color={theme.accentColor}
+                      />
+                    </View>
+                    <Text style={{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-Bold', color: colors.textSecondary }}>
+                      {categoryName} · {item.city || 'Zaragoza'}
+                    </Text>
                   </View>
 
                   <View
                     style={{
-                      flex: 1,
-                      height: 114,
-                      justifyContent: 'space-between',
-                      paddingRight: 44,
-                      paddingVertical: 2,
+                      backgroundColor: isDark ? '#1E2330' : '#F1F5F9',
+                      borderRadius: 999,
+                      paddingHorizontal: 10,
+                      paddingVertical: 4,
+                      borderWidth: 1,
+                      borderColor: colors.borderSubtle,
                     }}
                   >
                     <Text
-                      numberOfLines={1}
                       style={{
-                        fontSize: 16,
-                        fontFamily: 'Satoshi-Black',
+                        fontSize: 11,
+                        fontFamily: 'PlusJakartaSans-Bold',
                         color: colors.textPrimary,
                       }}
                     >
-                      {item.title || categoryName}
+                      {item.proposals?.length ? `${item.proposals.length} ofertas` : 'Nueva'}
                     </Text>
-
-                    <Text
-                      numberOfLines={2}
-                      style={{
-                        fontSize: 12.5,
-                        fontFamily: 'Satoshi-Regular',
-                        color: colors.textSecondary,
-                        lineHeight: 17,
-                        marginVertical: 2,
-                      }}
-                    >
-                      {item.description || 'Sin descripción adicional disponible para esta solicitud.'}
-                    </Text>
-
-                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 4 }}>
-                      <Text
-                        style={{
-                          fontSize: 22,
-                          fontFamily: 'Satoshi-Black',
-                          color: colors.textPrimary,
-                          lineHeight: 24,
-                        }}
-                      >
-                        {budgetDisplay}
-                      </Text>
-                      <Text
-                        style={{
-                          fontSize: 11.5,
-                          fontFamily: 'Satoshi-Medium',
-                          color: colors.textMuted,
-                        }}
-                      >
-                        {countLabel} · {item.city || 'Zaragoza'}
-                      </Text>
-                    </View>
                   </View>
                 </View>
 
-                <View
+                {/* Title */}
+                <Text
+                  numberOfLines={1}
                   style={{
-                    position: 'absolute',
-                    right: 4,
-                    bottom: 4,
-                    width: 42,
-                    height: 42,
-                    borderRadius: 21,
-                    backgroundColor: isDark ? '#FFFFFF' : '#0F172A',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.18,
-                    shadowRadius: 3,
-                    elevation: 3,
+                    fontSize: 17,
+                    fontFamily: 'PlusJakartaSans-ExtraBold',
+                    color: colors.textPrimary,
+                    letterSpacing: -0.3,
+                    marginBottom: 6,
                   }}
-                  pointerEvents="none"
                 >
-                  <Feather
-                    name="arrow-up-right"
-                    size={19}
-                    color={isDark ? '#0F172A' : '#FFFFFF'}
-                  />
+                  {item.title || categoryName}
+                </Text>
+
+                {/* Description */}
+                <Text
+                  numberOfLines={2}
+                  style={{
+                    fontSize: 13,
+                    fontFamily: 'PlusJakartaSans-Regular',
+                    color: colors.textSecondary,
+                    lineHeight: 19,
+                    marginBottom: 14,
+                  }}
+                >
+                  {item.description || 'Sin descripción adicional disponible para esta solicitud.'}
+                </Text>
+
+                {/* Bottom Row: Budget / Price + Action */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                    <Text
+                      style={{
+                        fontSize: 20,
+                        fontFamily: 'PlusJakartaSans-ExtraBold',
+                        color: colors.textPrimary,
+                      }}
+                    >
+                      {budgetDisplay}
+                    </Text>
+                    <Text
+                      style={{
+                        fontSize: 11.5,
+                        fontFamily: 'PlusJakartaSans-Medium',
+                        color: colors.textMuted,
+                      }}
+                    >
+                      {countLabel}
+                    </Text>
+                  </View>
+
+                  {isProfessional ? (
+                    <ThemedTouchable
+                      onPress={() => router.push({ pathname: '/request-detail', params: { id: item.id } })}
+                      haptic="medium"
+                      style={{
+                        backgroundColor: isDark ? '#FFFFFF' : '#09090B',
+                        borderRadius: 999,
+                        paddingHorizontal: 16,
+                        paddingVertical: 8,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <Ionicons name="flash" size={13} color={isDark ? '#09090B' : '#FFFFFF'} />
+                      <Text style={{ color: isDark ? '#09090B' : '#FFFFFF', fontFamily: 'PlusJakartaSans-Bold', fontSize: 12.5 }}>
+                        Presupuestar
+                      </Text>
+                    </ThemedTouchable>
+                  ) : (
+                    <View
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 17,
+                        backgroundColor: isDark ? '#1E2330' : '#F1F5F9',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        borderWidth: 1,
+                        borderColor: colors.borderSubtle,
+                      }}
+                    >
+                      <Ionicons name="chevron-forward" size={15} color={colors.textPrimary} />
+                    </View>
+                  )}
                 </View>
               </ThemedTouchable>
             );
@@ -1051,215 +1469,6 @@ export function RequestsTemplate() {
           }}
         />
       )}
-
-      <Modal
-        visible={isPublishModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setIsPublishModalVisible(false)}
-      >
-        <KeyboardAvoidingView
-          style={{ flex: 1, backgroundColor: colors.background }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View
-            style={{
-              flex: 1,
-              paddingTop: Math.max(insets.top + 8, 20),
-              paddingHorizontal: 22,
-              paddingBottom: Math.max(insets.bottom + 16, 24),
-              justifyContent: 'space-between',
-            }}
-          >
-            <ScrollView
-              style={{ flex: 1 }}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ flexGrow: 1, paddingBottom: 16 }}
-            >
-              <View className="flex-row items-center justify-between mb-3">
-                <Text style={{ fontSize: 18, fontFamily: 'Satoshi-Black', color: colors.textPrimary }}>
-                  {t.publishRequestModalTitle}
-                </Text>
-                <ThemedTouchable onPress={() => setIsPublishModalVisible(false)} haptic="light">
-                  <Ionicons name="close-circle" size={26} color={colors.textMuted} />
-                </ThemedTouchable>
-              </View>
-
-              <View className="flex-row items-center justify-between mb-4">
-                <View className="flex-row items-center gap-1.5 flex-1 mr-4">
-                  {[1, 2, 3].map((s) => (
-                    <View
-                      key={s}
-                      style={{
-                        flex: 1,
-                        height: 4,
-                        borderRadius: 2,
-                        backgroundColor: s <= publishStep ? colors.primary : colors.border,
-                      }}
-                    />
-                  ))}
-                </View>
-                <Text style={{ fontSize: 12.5, fontFamily: 'Satoshi-Bold', color: colors.textSecondary }}>
-                  Paso {publishStep} de 3
-                </Text>
-              </View>
-
-              {publishStep === 1 && (
-                <View>
-                  <Text style={{ fontSize: 21, fontFamily: 'Satoshi-Black', color: colors.textPrimary, marginBottom: 2 }}>
-                    {t.requestCategoryLabel}
-                  </Text>
-                  <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginBottom: 14 }}>
-                    Selecciona el tipo de trabajo que necesitas contratar.
-                  </Text>
-
-                  <View className="flex-row flex-wrap gap-2.5">
-                    {CATEGORIES_LIST.map((cat) => (
-                      <CategoryChip
-                        key={cat.id}
-                        label={cat.name}
-                        isSelected={newCategory === cat.name}
-                        onPress={() => setNewCategory(cat.name)}
-                      />
-                    ))}
-                  </View>
-                </View>
-              )}
-
-              {publishStep === 2 && (
-                <View>
-                  <Text style={{ fontSize: 21, fontFamily: 'Satoshi-Black', color: colors.textPrimary, marginBottom: 2 }}>
-                    Detalles del Trabajo
-                  </Text>
-                  <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginBottom: 14 }}>
-                    Describe qué necesitas reparar, instalar o reformar.
-                  </Text>
-
-                  <AuthInput
-                    label="Título del trabajo *"
-                    leftIcon="create-outline"
-                    value={newTitle}
-                    onChangeText={setNewTitle}
-                    placeholder="Ej. Cambio de cuadro eléctrico y boletín"
-                  />
-
-                  <AuthInput
-                    label="Descripción detallada *"
-                    leftIcon="document-text-outline"
-                    value={newDescription}
-                    onChangeText={setNewDescription}
-                    placeholder="Explica medidas, materiales, estado actual..."
-                    multiline
-                    numberOfLines={3}
-                    style={{ minHeight: 75 }}
-                  />
-                </View>
-              )}
-
-              {publishStep === 3 && (
-                <View>
-                  <Text style={{ fontSize: 21, fontFamily: 'Satoshi-Black', color: colors.textPrimary, marginBottom: 2 }}>
-                    Ubicación y Presupuesto
-                  </Text>
-                  <Text style={{ fontSize: 13, fontFamily: 'Satoshi-Regular', color: colors.textSecondary, marginBottom: 14 }}>
-                    Indica dónde se realizará el trabajo. Los profesionales de tu zona te enviarán sus ofertas y presupuestos detallados.
-                  </Text>
-
-                  <AuthInput
-                    label="Presupuesto orientativo (€) - Opcional"
-                    leftIcon="cash-outline"
-                    value={newBudget}
-                    onChangeText={setNewBudget}
-                    placeholder="Opcional (a convenir con el profesional)"
-                    keyboardType="numeric"
-                  />
-
-
-                  <View className="flex-row gap-2.5">
-                    <View className="flex-[1.1]">
-                      <AuthInput
-                        label="Localidad / Municipio *"
-                        leftIcon="location-outline"
-                        value={newCity}
-                        onChangeText={setNewCity}
-                        placeholder="Zaragoza"
-                      />
-                    </View>
-                    <View className="flex-[0.9]">
-                      <AuthInput
-                        label="Código Postal"
-                        leftIcon="mail-unread-outline"
-                        value={newPostalCode}
-                        onChangeText={setNewPostalCode}
-                        placeholder="50001"
-                        keyboardType="numeric"
-                        maxLength={5}
-                      />
-                    </View>
-                  </View>
-                </View>
-              )}
-            </ScrollView>
-
-            <View
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 12,
-                paddingTop: 12,
-                borderTopWidth: 1,
-                borderTopColor: colors.borderSubtle,
-              }}
-            >
-              {publishStep > 1 && (
-                <View style={{ width: 100 }}>
-                  <ThemedTouchable
-                    onPress={() => setPublishStep((prev) => prev - 1)}
-                    haptic="light"
-                    style={{
-                      height: 50,
-                      borderRadius: 999,
-                      backgroundColor: colors.surface,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Text style={{ fontSize: 14.5, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
-                      {t.back}
-                    </Text>
-                  </ThemedTouchable>
-                </View>
-              )}
-
-              <View className="flex-1">
-                <ThemedTouchable
-                  onPress={handleNextPublishStep}
-                  disabled={isSubmitting}
-                  haptic="medium"
-                  style={{
-                    height: 50,
-                    borderRadius: 999,
-                    backgroundColor: colors.primary,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  {isSubmitting ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={{ color: '#FFFFFF', fontSize: 15, fontFamily: 'Satoshi-Bold' }}>
-                      {publishStep === 3 ? t.publishBtn : t.next}
-                    </Text>
-                  )}
-                </ThemedTouchable>
-              </View>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       <CustomAlert
         visible={alertConfig.visible}

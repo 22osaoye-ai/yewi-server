@@ -56,6 +56,14 @@ export interface MessageReaction {
   userName: string;
 }
 
+export interface QuotedReplyMeta {
+  id: string;
+  senderName: string;
+  content: string;
+  type?: 'TEXT' | 'ATTACHMENT' | 'CUSTOM_OFFER' | 'SYSTEM_EVENT';
+  mediaUrl?: string;
+}
+
 export interface ChatMessage {
   id: string;
   conversationId: string;
@@ -66,6 +74,7 @@ export interface ChatMessage {
   metadata?: {
     attachmentsMeta?: AttachmentMeta[];
     reactions?: MessageReaction[];
+    replyTo?: QuotedReplyMeta;
     isStatusReply?: boolean;
     statusId?: string;
     statusCaption?: string;

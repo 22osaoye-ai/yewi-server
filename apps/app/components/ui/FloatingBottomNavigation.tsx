@@ -12,7 +12,7 @@ interface FloatingBottomNavigationProps {
 }
 
 // Custom SVG Icons matching the exact mockup
-function HomeIcon({ color = '#FFFFFF', size = 24 }: { color?: string; size?: number }) {
+function HomeIcon({ color = '#FFFFFF', size = 22 }: { color?: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path
@@ -70,10 +70,10 @@ function ProfileIcon({ color = '#E4E4E7', size = 22 }: { color?: string; size?: 
 }
 
 const TABS: { id: TabRoute; label: string; icon: any }[] = [
-  { id: 'home', label: 'Home', icon: HomeIcon },
-  { id: 'search', label: 'Search', icon: SearchIcon },
-  { id: 'favorites', label: 'Style', icon: HeartIcon },
-  { id: 'profile', label: 'Profile', icon: ProfileIcon },
+  { id: 'home', label: 'Inicio', icon: HomeIcon },
+  { id: 'search', label: 'Buscar', icon: SearchIcon },
+  { id: 'favorites', label: 'Favoritos', icon: HeartIcon },
+  { id: 'profile', label: 'Perfil', icon: ProfileIcon },
 ];
 
 export const FloatingBottomNavigation: React.FC<FloatingBottomNavigationProps> = ({
@@ -82,13 +82,13 @@ export const FloatingBottomNavigation: React.FC<FloatingBottomNavigationProps> =
 }) => {
   const handlePress = (tab: TabRoute) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    Haptics.selectionAsync().catch(() => {});
     onTabPress(tab);
   };
 
   return (
     <View className="absolute bottom-6 left-4 right-4 items-center z-50 pointer-events-box-none">
-      <View className="flex-row items-center justify-between bg-[#191614] rounded-full p-2 w-full shadow-2xl elevation-16">
+      <View className="flex-row items-center justify-between bg-[#0F172A] rounded-full p-2 w-full border border-white/10">
         {TABS.map((tab) => {
           const isActive = currentTab === tab.id;
           const IconComponent = tab.icon;
@@ -99,12 +99,12 @@ export const FloatingBottomNavigation: React.FC<FloatingBottomNavigationProps> =
                 key={tab.id}
                 onPress={() => handlePress(tab.id)}
                 activeOpacity={0.9}
-                className="flex-row items-center bg-white rounded-full p-1 pr-5 shadow-md elevation-4"
+                className="flex-row items-center bg-white rounded-full p-1 pr-4 border border-black/5"
               >
-                <View className="w-[48px] h-[48px] rounded-full bg-[#C87D20] items-center justify-center">
-                  <IconComponent color="#FFFFFF" size={24} />
+                <View className="w-[44px] h-[44px] rounded-full bg-[#0284C7] items-center justify-center">
+                  <IconComponent color="#FFFFFF" size={22} />
                 </View>
-                <Text className="font-satoshi-bold text-[#18181B] text-[15px] ml-3 tracking-tight">
+                <Text numberOfLines={1} className="font-sans-bold text-[#0F172A] text-[14px] ml-2.5 tracking-tight">
                   {tab.label}
                 </Text>
               </TouchableOpacity>
@@ -116,9 +116,9 @@ export const FloatingBottomNavigation: React.FC<FloatingBottomNavigationProps> =
               key={tab.id}
               onPress={() => handlePress(tab.id)}
               activeOpacity={0.8}
-              className="w-[48px] h-[48px] rounded-full bg-[#2A2520] items-center justify-center"
+              className="w-[48px] h-[48px] rounded-full bg-[#1E293B] items-center justify-center"
             >
-              <IconComponent color="#E4E4E7" size={22} />
+              <IconComponent color="#94A3B8" size={22} />
             </TouchableOpacity>
           );
         })}

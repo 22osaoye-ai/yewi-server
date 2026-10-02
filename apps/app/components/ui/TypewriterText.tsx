@@ -16,7 +16,7 @@ export function TypewriterText({
   deletingSpeed = 35,
   pauseTime = 1800,
   style,
-  cursorColor = '#C87D20',
+  cursorColor = '#0284C7',
 }: TypewriterTextProps) {
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [charIndex, setCharIndex] = useState(0);

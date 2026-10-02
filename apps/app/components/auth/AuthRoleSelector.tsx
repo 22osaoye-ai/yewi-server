@@ -22,7 +22,7 @@ export function AuthRoleSelector({
       <Text
         style={{
           fontSize: 14,
-          fontFamily: 'Satoshi-Bold',
+          fontFamily: 'PlusJakartaSans-Bold',
           color: colors.textPrimary,
           marginBottom: 12,
         }}
@@ -76,7 +76,7 @@ export function AuthRoleSelector({
           <Text
             style={{
               fontSize: 15,
-              fontFamily: 'Satoshi-Bold',
+              fontFamily: 'PlusJakartaSans-Bold',
               color: selectedRole === 'CLIENT' ? '#FFFFFF' : colors.textPrimary,
             }}
           >
@@ -85,7 +85,7 @@ export function AuthRoleSelector({
           <Text
             style={{
               fontSize: 12,
-              fontFamily: 'Satoshi-Regular',
+              fontFamily: 'PlusJakartaSans-Regular',
               color: selectedRole === 'CLIENT' ? 'rgba(255,255,255,0.7)' : colors.textSecondary,
               marginTop: 2,
             }}
@@ -140,7 +140,7 @@ export function AuthRoleSelector({
           <Text
             style={{
               fontSize: 15,
-              fontFamily: 'Satoshi-Bold',
+              fontFamily: 'PlusJakartaSans-Bold',
               color: selectedRole === 'PROFESSIONAL' ? '#FFFFFF' : colors.textPrimary,
             }}
           >
@@ -149,7 +149,7 @@ export function AuthRoleSelector({
           <Text
             style={{
               fontSize: 12,
-              fontFamily: 'Satoshi-Regular',
+              fontFamily: 'PlusJakartaSans-Regular',
               color: selectedRole === 'PROFESSIONAL' ? 'rgba(255,255,255,0.7)' : colors.textSecondary,
               marginTop: 2,
             }}

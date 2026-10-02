@@ -17,11 +17,19 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack, useRouter, useRootNavigationState, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { StatusBar as RNStatusBar, Platform } from 'react-native';
 import 'react-native-reanimated';
+import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated';
+
+// Disable Reanimated strict mode to eliminate render warnings with React Compiler
+configureReanimatedLogger({
+  level: ReanimatedLogLevel.warn,
+  strict: false,
+});
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ClerkAuthSync } from '@/components/auth/ClerkAuthSync';
@@ -29,6 +37,8 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { realtimeService } from '@/services/realtimeService';
 import { notificationService } from '@/services/notificationService';
 import { ToastContainer } from '@/components/ui/ToastContainer';
+import { AnimatedSplashOverlay } from '@/components/ui/AnimatedSplashOverlay';
+import { warmUpBackend } from '@/services/apiClient';
 
 WebBrowser.maybeCompleteAuthSession();
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -65,10 +75,17 @@ function RootNavigation({ isFontsReady }: { isFontsReady: boolean }) {
   const segments = useSegments();
   const navigationState = useRootNavigationState();
   const colorScheme = useColorScheme();
+  const { isSignedIn, isLoaded: isClerkLoaded } = useAuth();
   const { isAuthenticated, isLoading, hasSeenOnboarding, needsProfileCompletion } = useAuthStore();
 
   const isNavigationReady = Boolean(navigationState?.key);
-  const isAppReady = !isLoading && isNavigationReady && isFontsReady;
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      RNStatusBar.setTranslucent(true);
+      RNStatusBar.setBackgroundColor('transparent');
+    }
+  }, []);
 
   useEffect(() => {
     notificationService.init().catch(() => {});
@@ -109,57 +126,42 @@ function RootNavigation({ isFontsReady }: { isFontsReady: boolean }) {
   }, [router]);
 
   useEffect(() => {
-    if (!isAppReady) return;
+    if (!isNavigationReady || isLoading || !isClerkLoaded) return;
 
-    const inAuthGroup = segments[0] === 'auth';
-    const inTabsGroup = segments[0] === '(tabs)';
-    const inAppRoute = [
-      'notifications',
-      'detail',
-      'request-detail',
-      'chat',
-      'vouchers',
-      'professional-profile',
-      'subscription',
-    ].includes(String(segments[0] ?? ''));
+    // Si Clerk ya tiene sesión activa pero el store de Zustand aún está sincronizando, esperar sin redirigir al login
+    if (isSignedIn && !isAuthenticated) return;
+
+    const segList = segments as string[];
+    const inAuthGroup = segList[0] === 'auth';
+    const isSsoCallback = segList[0] === 'sso-callback';
+    const isAtRoot = segList.length === 0 || segList[0] === 'index' || !segList[0];
 
     const timeout = setTimeout(() => {
       if (isAuthenticated) {
         if (needsProfileCompletion) {
-          if (segments[1] !== 'complete-profile') {
+          if (segList[1] !== 'complete-profile') {
             router.replace('/auth/complete-profile');
           }
-        } else {
-          if (!inTabsGroup && !inAppRoute) {
-            router.replace('/(tabs)');
-          }
+        } else if (inAuthGroup || isAtRoot) {
+          // If authenticated and on auth or onboarding root index, enter app
+          router.replace('/(tabs)');
         }
       } else {
-        if (hasSeenOnboarding) {
-          if (!inAuthGroup && !inAppRoute && !inTabsGroup) {
+        // Not authenticated: strictly redirect to /auth/login or onboarding
+        if (!inAuthGroup && !isSsoCallback) {
+          if (hasSeenOnboarding) {
             router.replace('/auth/login');
+          } else {
+            if (segList.length > 0 && !isAtRoot) {
+              router.replace('/');
+            }
           }
         }
       }
     }, 50);
 
     return () => clearTimeout(timeout);
-  }, [isAppReady, isAuthenticated, hasSeenOnboarding, needsProfileCompletion, segments]);
-
-  if (!isAppReady) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: colorScheme === 'dark' ? '#09090B' : '#09090B',
-        }}
-      >
-        <ActivityIndicator size="large" color="#C87D20" />
-      </View>
-    );
-  }
+  }, [isNavigationReady, isLoading, isClerkLoaded, isSignedIn, isAuthenticated, hasSeenOnboarding, needsProfileCompletion, segments]);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -171,8 +173,9 @@ function RootNavigation({ isFontsReady }: { isFontsReady: boolean }) {
         <Stack.Screen name="chat" options={{ headerShown: false }} />
         <Stack.Screen name="professional-profile" options={{ headerShown: false }} />
         <Stack.Screen name="subscription" options={{ headerShown: false }} />
-        <Stack.Screen name="vouchers" options={{ headerShown: false }} />
         <Stack.Screen name="notifications" options={{ headerShown: false }} />
+        <Stack.Screen name="publish" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="create-review" options={{ headerShown: false, animation: 'slide_from_bottom' }} />
 
         <Stack.Screen name="auth/login" options={{ headerShown: false }} />
         <Stack.Screen name="auth/register" options={{ headerShown: false }} />
@@ -180,31 +183,61 @@ function RootNavigation({ isFontsReady }: { isFontsReady: boolean }) {
         <Stack.Screen name="sso-callback" options={{ headerShown: false }} />
       </Stack>
 
-      <StatusBar style="light" />
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
       <ToastContainer />
     </ThemeProvider>
   );
 }
 
+// Deduplicate font file references to avoid redundant asset processing in Metro
+const fontLight = require('../assets/fonts/PlusJakartaSans-Light.ttf');
+const fontRegular = require('../assets/fonts/PlusJakartaSans-Regular.ttf');
+const fontMedium = require('../assets/fonts/PlusJakartaSans-Medium.ttf');
+const fontSemiBold = require('../assets/fonts/PlusJakartaSans-SemiBold.ttf');
+const fontBold = require('../assets/fonts/PlusJakartaSans-Bold.ttf');
+const fontExtraBold = require('../assets/fonts/PlusJakartaSans-ExtraBold.ttf');
+
 export default function RootLayout() {
-  const { isLoading } = useAuthStore();
+  const isInitialLoading = useAuthStore((state) => state.isLoading);
+  const [hasBootstrapped, setHasBootstrapped] = useState(false);
   const [loaded, error] = useFonts({
-    'Satoshi-Light': require('../assets/fonts/Satoshi-Light.ttf'),
-    'Satoshi-Regular': require('../assets/fonts/Satoshi-Regular.ttf'),
-    'Satoshi-Medium': require('../assets/fonts/Satoshi-Medium.ttf'),
-    'Satoshi-Bold': require('../assets/fonts/Satoshi-Bold.ttf'),
-    'Satoshi-Black': require('../assets/fonts/Satoshi-Black.ttf'),
+    'PlusJakartaSans-Light': fontLight,
+    'PlusJakartaSans-Regular': fontRegular,
+    'PlusJakartaSans-Medium': fontMedium,
+    'PlusJakartaSans-SemiBold': fontSemiBold,
+    'PlusJakartaSans-Bold': fontBold,
+    'PlusJakartaSans-ExtraBold': fontExtraBold,
+    // Alias GoogleSans
+    'GoogleSans-Regular': fontRegular,
+    'GoogleSans-Medium': fontMedium,
+    'GoogleSans-Bold': fontBold,
+    // Alias de retrocompatibilidad Satoshi para renderizado inmediato
+    'Satoshi-Light': fontLight,
+    'Satoshi-Regular': fontRegular,
+    'Satoshi-Medium': fontMedium,
+    'Satoshi-Bold': fontBold,
+    'Satoshi-Black': fontExtraBold,
   });
 
   const isFontsReady = Boolean(loaded || error);
 
   useEffect(() => {
-    if (isFontsReady && !isLoading) {
+    if (!isInitialLoading) {
+      setHasBootstrapped(true);
+    }
+  }, [isInitialLoading]);
+
+  useEffect(() => {
+    warmUpBackend();
+  }, []);
+
+  useEffect(() => {
+    if (isFontsReady && hasBootstrapped) {
       SplashScreen.hideAsync().catch(() => {});
     }
-  }, [isFontsReady, isLoading]);
+  }, [isFontsReady, hasBootstrapped]);
 
-  if (!isFontsReady || isLoading) {
+  if (!isFontsReady || (!hasBootstrapped && isInitialLoading)) {
     return (
       <View
         style={{
@@ -214,13 +247,14 @@ export default function RootLayout() {
           backgroundColor: '#09090B',
         }}
       >
-        <ActivityIndicator size="large" color="#C87D20" />
+        <ActivityIndicator size="large" color="#0284C7" />
       </View>
     );
   }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <AnimatedSplashOverlay isReady={isFontsReady && hasBootstrapped} />
       <ClerkProvider
         publishableKey={publishableKey}
         tokenCache={tokenCache}

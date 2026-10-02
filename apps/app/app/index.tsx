@@ -98,7 +98,7 @@ function OnboardingItem({
             lineHeight: 48,
             paddingBottom: 6,
             paddingTop: 2,
-            fontFamily: 'Satoshi-Black',
+            fontFamily: 'PlusJakartaSans-ExtraBold',
             color: '#18181B',
             letterSpacing: -0.5,
           }}
@@ -111,7 +111,7 @@ function OnboardingItem({
             lineHeight: 48,
             paddingBottom: 6,
             paddingTop: 2,
-            fontFamily: 'Satoshi-Black',
+            fontFamily: 'PlusJakartaSans-ExtraBold',
             color: '#18181B',
             letterSpacing: -0.5,
           }}
@@ -125,7 +125,7 @@ function OnboardingItem({
             paddingBottom: 8,
             paddingTop: 2,
             marginBottom: 12,
-            fontFamily: 'Satoshi-Black',
+            fontFamily: 'PlusJakartaSans-ExtraBold',
             color: '#18181B',
             letterSpacing: -0.5,
           }}
@@ -137,7 +137,7 @@ function OnboardingItem({
           style={{
             fontSize: 15,
             lineHeight: 24,
-            fontFamily: 'Satoshi-Medium',
+            fontFamily: 'PlusJakartaSans-Medium',
             color: 'rgba(24, 24, 27, 0.85)',
           }}
         >
@@ -197,22 +197,6 @@ export default function OnboardingScreen() {
   const [activePageIndex, setActivePageIndex] = useState(0);
   const { isAuthenticated, isLoading, hasSeenOnboarding, setHasSeenOnboarding } = useAuthStore();
 
-  if (isLoading || isAuthenticated || hasSeenOnboarding) {
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: '#F8F8FA',
-        }}
-      >
-        <ActivityIndicator size="large" color="#C87D20" />
-      </View>
-    );
-  }
-
-
   const buttonWaveScale = useSharedValue(0);
   const buttonWaveOpacity = useSharedValue(0);
 
@@ -246,6 +230,30 @@ export default function OnboardingScreen() {
     );
     return { opacity };
   });
+
+  useEffect(() => {
+    if (isLoading) return;
+    if (isAuthenticated) {
+      router.replace('/(tabs)');
+    } else if (hasSeenOnboarding) {
+      router.replace('/auth/login');
+    }
+  }, [isLoading, isAuthenticated, hasSeenOnboarding, router]);
+
+  if (isLoading || isAuthenticated || hasSeenOnboarding) {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: '#F8F8FA',
+        }}
+      >
+        <ActivityIndicator size="large" color="#0284C7" />
+      </View>
+    );
+  }
 
   const handleNext = () => {
     const currentPage = Math.round(x.value / SCREEN_WIDTH);
@@ -395,7 +403,7 @@ export default function OnboardingScreen() {
             <Animated.Text
               style={[
                 {
-                  fontFamily: 'Satoshi-Bold',
+                  fontFamily: 'PlusJakartaSans-Bold',
                   color: '#FFFFFF',
                   fontSize: 15,
                   letterSpacing: -0.3,
@@ -409,7 +417,7 @@ export default function OnboardingScreen() {
             <Animated.Text
               style={[
                 {
-                  fontFamily: 'Satoshi-Bold',
+                  fontFamily: 'PlusJakartaSans-Bold',
                   color: '#FFFFFF',
                   fontSize: 15,
                   letterSpacing: -0.3,

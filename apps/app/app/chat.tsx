@@ -11,6 +11,7 @@ import {
   ScrollView,
   StyleSheet,
   RefreshControl,
+  BackHandler,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,6 +22,7 @@ import { io, Socket } from 'socket.io-client';
 import { ThemedTouchable } from '@/components/ui/ThemedTouchable';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useAuthStore } from '@/store/useAuthStore';
+import { isUserProfessional } from '@/hooks/useUserRole';
 import {
   chatApi,
   ChatMessage,
@@ -37,14 +39,14 @@ import { getAccessToken } from '@/services/apiClient';
 import { toast } from '@/store/useToastStore';
 import { useSeenStatusesStore } from '@/store/useSeenStatusesStore';
 import { StatusViewerModal } from '@/components/chat/StatusViewerModal';
-import { CreateStatusModal } from '@/components/chat/CreateStatusModal';
 import { ChannelHeader } from '@/components/chat/ChannelHeader';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { MessageInputComposer } from '@/components/chat/MessageInputComposer';
 import { MessageReactionsBar } from '@/components/chat/MessageReactionsBar';
 import { ImageViewerModal } from '@/components/chat/ImageViewerModal';
 import { AttachmentMeta } from '@/services/chatApi';
-import { FloatingActionButton } from '@/components/ui/FloatingActionButton';
+import { useFavoritesStore } from '@/store/useFavoritesStore';
+import { useChatStore } from '@/store/useChatStore';
 
 
 type ChatTab = 'CHATS' | 'ESTADOS' | 'CONTACTOS';
@@ -77,32 +79,50 @@ export default function ChatScreen() {
 
   const [activeTab, setActiveTab] = useState<ChatTab>('CHATS');
 
-  // Hub data state
-  const [conversationsList, setConversationsList] = useState<ConversationItem[]>([]);
-  const [loadingConversations, setLoadingConversations] = useState(false);
+  // Persistent Hub & Chat State from useChatStore (Zero reloads on tab switches or route transitions)
+  const conversationsList = useChatStore((s) => s.conversations);
+  const loadingConversations = useChatStore((s) => s.isConversationsLoading);
+  const storiesFeed = useChatStore((s) => s.storiesFeed);
+  const loadingStories = useChatStore((s) => s.isStoriesLoading);
+  const contactsList = useChatStore((s) => s.contacts);
+  const loadingContacts = useChatStore((s) => s.isContactsLoading);
+  const isConversationLoading = useChatStore((s) => s.isConversationLoading);
+  const conversationCache = useChatStore((s) => s.conversationCache);
+  const isTypingByConv = useChatStore((s) => s.isTypingByConv);
 
-  const [storiesFeed, setStoriesFeed] = useState<AuthorStatusFeedGroup[]>([]);
-  const [loadingStories, setLoadingStories] = useState(false);
+  const fetchConversations = useChatStore((s) => s.fetchConversations);
+  const fetchStories = useChatStore((s) => s.fetchStories);
+  const fetchContacts = useChatStore((s) => s.fetchContacts);
+  const fetchConversationDetail = useChatStore((s) => s.fetchConversationDetail);
+  const addOptimisticMessage = useChatStore((s) => s.addOptimisticMessage);
+  const replaceOptimisticMessage = useChatStore((s) => s.replaceOptimisticMessage);
+  const removeOptimisticMessage = useChatStore((s) => s.removeOptimisticMessage);
+  const toggleMessageReaction = useChatStore((s) => s.toggleMessageReaction);
+  const initRealtimeObserver = useChatStore((s) => s.initRealtimeObserver);
+
+  // Derived 1-on-1 state from cache (0ms instant render when cached)
+  const cachedItem = activeTargetId ? conversationCache[activeTargetId] : null;
+  const conversation = cachedItem?.detail || null;
+  const messages = cachedItem?.messages || [];
+  const isLoadingConv = isConversationLoading && !cachedItem;
+  const isOtherTyping = Boolean(
+    conversation?.conversationId && isTypingByConv[conversation.conversationId]
+  );
+
   const [selectedStoryGroup, setSelectedStoryGroup] = useState<AuthorStatusFeedGroup | null>(null);
-  const [isCreateStatusOpen, setIsCreateStatusOpen] = useState(false);
-
-  const [contactsList, setContactsList] = useState<ContactItem[]>([]);
-  const [loadingContacts, setLoadingContacts] = useState(false);
+  const isCurrentUserPro = isUserProfessional(user);
   const [contactSearchQuery, setContactSearchQuery] = useState('');
-
-  // 1-on-1 Conversation state
-  const [conversation, setConversation] = useState<ConversationDetail | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState(params.initialMessage || '');
-  const [isLoadingConv, setIsLoadingConv] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [errorConv, setErrorConv] = useState<string | null>(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [isOtherTyping, setIsOtherTyping] = useState(false);
 
   const [pendingAttachment, setPendingAttachment] = useState<
     (AttachmentMeta & { localUri?: string; base64?: string }) | null
   >(null);
+  const [replyingToMessage, setReplyingToMessage] = useState<ChatMessage | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedMessageForReactions, setSelectedMessageForReactions] =
     useState<ChatMessage | null>(null);
   const [activeImageViewer, setActiveImageViewer] = useState<{
@@ -111,8 +131,39 @@ export default function ChatScreen() {
   } | null>(null);
 
   const flatListRef = useRef<FlatList>(null);
-  const socketRef = useRef<Socket | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTypingEmittedRef = useRef<boolean>(false);
+
+  // Back button handling
+  useEffect(() => {
+    const onBackPress = () => {
+      if (selectedStoryGroup) {
+        setSelectedStoryGroup(null);
+        return true;
+      }
+      if (activeTargetId) {
+        if (params.conversationId || params.id || params.targetUserId || params.orderId || params.requestId) {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/(tabs)');
+          }
+          return true;
+        }
+        setActiveTargetId(null);
+        return true;
+      }
+      if (router.canGoBack()) {
+        router.back();
+        return true;
+      }
+      router.replace('/(tabs)');
+      return true;
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backHandler.remove();
+  }, [selectedStoryGroup, activeTargetId, params, router]);
 
   // Stream Chat client & active channel state
   const [streamClient, setStreamClient] = useState<any>(null);
@@ -160,8 +211,6 @@ export default function ChatScreen() {
     };
   }, [streamClient, conversation, user?.id]);
 
-  const isTypingEmittedRef = useRef<boolean>(false);
-
   // Sync params if they change dynamically
   useEffect(() => {
     const newTarget =
@@ -175,217 +224,71 @@ export default function ChatScreen() {
     }
   }, [params.conversationId, params.id, params.targetUserId, params.orderId, params.requestId]);
 
-  // Load Hub data
-  const loadConversations = useCallback(async () => {
-    try {
-      setLoadingConversations(true);
-      const data = await chatApi.getMyConversations();
-      setConversationsList(Array.isArray(data) ? data : []);
-    } catch {
-      setConversationsList([]);
-    } finally {
-      setLoadingConversations(false);
-    }
-  }, []);
+  // Persistent socket observer initialized on mount (handles real-time messages & reactions across tabs)
+  useEffect(() => {
+    initRealtimeObserver();
+  }, [initRealtimeObserver]);
 
-  const loadStories = useCallback(async () => {
-    try {
-      setLoadingStories(true);
-      const feed = await statusesApi.getFeed();
-      setStoriesFeed(Array.isArray(feed) ? feed : []);
-    } catch {
-      setStoriesFeed([]);
-    } finally {
-      setLoadingStories(false);
-    }
-  }, []);
-
-  const loadContacts = useCallback(async () => {
-    try {
-      setLoadingContacts(true);
-      const contacts = await chatApi.getContacts();
-      setContactsList(Array.isArray(contacts) ? contacts : []);
-    } catch {
-      setContactsList([]);
-    } finally {
-      setLoadingContacts(false);
-    }
-  }, []);
-
+  // Fetch Hub data using SWR (Cache-first: 0ms if already cached, no re-fetching on tab switches)
   useEffect(() => {
     if (!activeTargetId) {
-      loadConversations();
-      loadStories();
-      loadContacts();
+      fetchConversations(false);
+      fetchStories(false);
+      fetchContacts(false);
     }
-  }, [activeTargetId, loadConversations, loadStories, loadContacts]);
+  }, [activeTargetId, fetchConversations, fetchStories, fetchContacts]);
 
-  // Realtime updates for statuses and chat across all devices
-  useEffect(() => {
-    const unsubStatusNew = realtimeService.on('status:new', (data) => {
-      if (data?.authorGroup) {
-        setStoriesFeed((prev) => {
-          const filtered = prev.filter((g) => g.authorId !== data.authorGroup.authorId);
-          return [data.authorGroup, ...filtered];
-        });
-      } else {
-        loadStories();
+  // Load 1-on-1 Conversation detail (SWR: 0ms if already cached)
+  const loadConversationDetail = useCallback(
+    async (force = false) => {
+      if (!activeTargetId) return;
+      try {
+        setErrorConv(null);
+        await fetchConversationDetail(activeTargetId, force);
+      } catch (err: any) {
+        if (!cachedItem) {
+          setErrorConv(err.message || 'No se pudo cargar la conversación.');
+        }
       }
-    });
-
-    const unsubComment = realtimeService.on('status:comment:new', () => {
-      loadStories();
-      loadConversations();
-    });
-
-    const unsubReaction = realtimeService.on('status:reaction:update', () => {
-      loadStories();
-    });
-
-    const unsubView = realtimeService.on('status:view:update', (data) => {
-      if (data?.statusId) {
-        setStoriesFeed((prev) =>
-          prev.map((group) => ({
-            ...group,
-            statuses: group.statuses.map((st) =>
-              st.id === data.statusId ? { ...st, viewCount: data.viewCount } : st
-            ),
-          }))
-        );
-        setSelectedStoryGroup((prev) => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            statuses: prev.statuses.map((st) =>
-              st.id === data.statusId ? { ...st, viewCount: data.viewCount } : st
-            ),
-          };
-        });
-      }
-    });
-
-    const unsubChatUpdate = realtimeService.on('chat:conversation:update', () => {
-      loadConversations();
-    });
-
-    const unsubChatNew = realtimeService.on('chat:message:new', (data) => {
-      loadConversations();
-      if (data?.conversationId && data?.message) {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === data.message.id)) return prev;
-          return [...prev, data.message];
-        });
-      }
-    });
-
-    const unsubNotif = realtimeService.on('notification:new', () => {
-      loadConversations();
-    });
-
-    return () => {
-      unsubStatusNew();
-      unsubComment();
-      unsubReaction();
-      unsubView();
-      unsubChatUpdate();
-      unsubChatNew();
-      unsubNotif();
-    };
-  }, [loadStories, loadConversations]);
-
-  // Connect Stream Chat background sync on mount
-  useEffect(() => {
-    if (isStreamNativeSupported && user?.id) {
-      streamChatService.getConnectedClient().catch(() => {});
-    }
-    return () => {
-      // Keep alive during app session
-    };
-  }, [user?.id]);
-
-  // Load 1-on-1 Conversation
-  const loadConversationDetail = useCallback(async () => {
-    if (!activeTargetId) return;
-
-    try {
-      setIsLoadingConv(true);
-      setErrorConv(null);
-      const data = await chatApi.getMessages(activeTargetId);
-      setConversation(data);
-      setMessages(data.messages || []);
-    } catch (err: any) {
-      setErrorConv(err.message || 'No se pudo cargar la conversación.');
-    } finally {
-      setIsLoadingConv(false);
-    }
-  }, [activeTargetId]);
+    },
+    [activeTargetId, fetchConversationDetail, cachedItem]
+  );
 
   useEffect(() => {
     if (activeTargetId) {
-      loadConversationDetail();
+      loadConversationDetail(false);
     }
   }, [activeTargetId, loadConversationDetail]);
 
-  // WebSocket for Realtime chat updates in active conversation
+  // Keep selectedStoryGroup in sync if stories feed updates via socket
   useEffect(() => {
-    const activeConvId = conversation?.conversationId;
-    if (!activeConvId) return;
+    if (!selectedStoryGroup) return;
+    const current = storiesFeed.find((g) => g.authorId === selectedStoryGroup.authorId);
+    if (current && current !== selectedStoryGroup) {
+      setSelectedStoryGroup(current);
+    }
+  }, [storiesFeed, selectedStoryGroup]);
 
-    const unsubMsg = realtimeService.on('chat:message:new', (data) => {
-      if (data?.conversationId === activeConvId && data?.message) {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === data.message.id)) return prev;
-          return [...prev, data.message];
-        });
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 80);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-      }
-    });
+  // Auto-scroll on new message arrivals
+  useEffect(() => {
+    if (messages.length > 0) {
+      const t = setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 60);
+      return () => clearTimeout(t);
+    }
+  }, [messages.length]);
 
-    const unsubReaction = realtimeService.on('chat:message:reaction', (data) => {
-      if (data?.conversationId === activeConvId && data?.messageId) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === data.messageId
-              ? {
-                  ...m,
-                  metadata: {
-                    ...m.metadata,
-                    reactions: data.reactions,
-                  },
-                }
-              : m,
-          ),
-        );
-      }
-    });
-
-    const unsubTyping = realtimeService.on('user_typing', (data) => {
-      if (data?.conversationId === activeConvId && data?.userId !== user?.id) {
-        setIsOtherTyping(Boolean(data.isTyping));
-      }
-    });
-
-    return () => {
-      unsubMsg();
-      unsubReaction();
-      unsubTyping();
-    };
-  }, [conversation?.conversationId, user?.id]);
-
-  // Typing emitter helper
+  // Typing emitter via realtimeService
   const handleInputChange = (text: string) => {
     setInputText(text);
 
     const convId = conversation?.conversationId;
-    const socket = socketRef.current;
-    if (!socket || !convId) return;
+    if (!convId) return;
 
     if (!isTypingEmittedRef.current && text.length > 0) {
       isTypingEmittedRef.current = true;
-      socket.emit('typing', { conversationId: convId, isTyping: true });
+      realtimeService.emitSocketEvent('typing', { conversationId: convId, isTyping: true });
     }
 
     if (typingTimeoutRef.current) {
@@ -394,78 +297,65 @@ export default function ChatScreen() {
 
     typingTimeoutRef.current = setTimeout(() => {
       isTypingEmittedRef.current = false;
-      socket.emit('typing', { conversationId: convId, isTyping: false });
+      realtimeService.emitSocketEvent('typing', { conversationId: convId, isTyping: false });
     }, 2000);
   };
 
-  // Toggle emoji reaction
+  // Toggle emoji reaction (Optimistic in store with rollback on failure)
   const handleToggleReaction = async (targetMessage: ChatMessage, emoji: string) => {
-    if (!user?.id) return;
-    const currentReactions = targetMessage.metadata?.reactions || [];
-    const hasReacted = currentReactions.some((r) => r.userId === user.id && r.emoji === emoji);
+    if (!user?.id || !conversation) return;
+    const convId = conversation.conversationId;
+    const userName = user.email?.split('@')[0] || 'Tú';
 
-    let newReactions: any[];
-    if (hasReacted) {
-      newReactions = currentReactions.filter((r) => !(r.userId === user.id && r.emoji === emoji));
-    } else {
-      const otherReactions = currentReactions.filter((r) => r.userId !== user.id);
-      const userName = user.email?.split('@')[0] || 'Tú';
-      newReactions = [...otherReactions, { emoji, userId: user.id, userName }];
+    toggleMessageReaction(convId, targetMessage.id, emoji, user.id, userName);
+    if (activeTargetId && activeTargetId !== convId) {
+      toggleMessageReaction(activeTargetId, targetMessage.id, emoji, user.id, userName);
     }
 
-    // Optimistic UI update
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === targetMessage.id
-          ? {
-              ...m,
-              metadata: {
-                ...m.metadata,
-                reactions: newReactions,
-              },
-            }
-          : m,
-      ),
-    );
-
     try {
-      const res = await chatApi.toggleReaction(targetMessage.id, emoji);
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === targetMessage.id
-            ? {
-                ...m,
-                metadata: {
-                  ...m.metadata,
-                  reactions: res.reactions,
-                },
-              }
-            : m,
-        ),
-      );
+      await chatApi.toggleReaction(targetMessage.id, emoji);
     } catch {
-      // Revert if error
-      setMessages((prev) =>
-        prev.map((m) => (m.id === targetMessage.id ? targetMessage : m)),
-      );
+      toggleMessageReaction(convId, targetMessage.id, emoji, user.id, userName);
+      if (activeTargetId && activeTargetId !== convId) {
+        toggleMessageReaction(activeTargetId, targetMessage.id, emoji, user.id, userName);
+      }
+      toast.error('Error', 'No se pudo registrar la reacción.');
     }
   };
 
-  // Send message (text, documents, photos, quick actions)
+  // Send message (Optimistic update via useChatStore)
   const handleSendMessage = async () => {
     const text = inputText.trim();
     if ((!text && !pendingAttachment) || !conversation || isSending) return;
 
     const convId = conversation.conversationId;
     const currentAtt = pendingAttachment;
+    const currentReply = replyingToMessage;
 
     setInputText('');
     setPendingAttachment(null);
+    setReplyingToMessage(null);
 
-    if (socketRef.current && isTypingEmittedRef.current) {
+    if (isTypingEmittedRef.current) {
       isTypingEmittedRef.current = false;
-      socketRef.current.emit('typing', { conversationId: convId, isTyping: false });
+      realtimeService.emitSocketEvent('typing', { conversationId: convId, isTyping: false });
     }
+
+    const optimisticReplyMeta = currentReply
+      ? {
+          replyTo: {
+            id: currentReply.id,
+            senderName:
+              currentReply.sender?.profile?.displayName ||
+              (currentReply.senderId === user?.id ? 'Tú' : 'Usuario'),
+            content:
+              currentReply.content ||
+              (currentReply.attachments?.length ? '📷 Archivo adjunto' : 'Mensaje'),
+            type: currentReply.type,
+            mediaUrl: currentReply.attachments?.[0],
+          },
+        }
+      : {};
 
     const optimisticId = `temp-${Date.now()}`;
     const optimisticMessage: ChatMessage = {
@@ -475,7 +365,10 @@ export default function ChatScreen() {
       type: currentAtt ? 'ATTACHMENT' : 'TEXT',
       content: text,
       attachments: currentAtt ? [currentAtt.url] : [],
-      metadata: currentAtt ? { attachmentsMeta: [currentAtt] } : {},
+      metadata: {
+        ...(currentAtt ? { attachmentsMeta: [currentAtt] } : {}),
+        ...optimisticReplyMeta,
+      },
       isRead: false,
       createdAt: new Date().toISOString(),
       sender: {
@@ -487,14 +380,21 @@ export default function ChatScreen() {
       },
     };
 
-    setMessages((prev) => [...prev, optimisticMessage]);
+    if (activeTargetId) {
+      addOptimisticMessage(activeTargetId, optimisticMessage);
+    }
+    if (convId !== activeTargetId) {
+      addOptimisticMessage(convId, optimisticMessage);
+    }
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
     try {
       setIsSending(true);
 
       let finalAttachments: string[] = [];
-      let finalMeta: Record<string, any> = {};
+      let finalMeta: Record<string, any> = {
+        ...optimisticReplyMeta,
+      };
 
       if (currentAtt) {
         if (currentAtt.base64 && currentAtt.base64.startsWith('data:')) {
@@ -520,16 +420,57 @@ export default function ChatScreen() {
         metadata: finalMeta,
       });
 
-      setMessages((prev) =>
-        prev.map((m) => (m.id === optimisticId ? sent : m)),
-      );
+      if (activeTargetId) {
+        replaceOptimisticMessage(activeTargetId, optimisticId, sent);
+      }
+      if (convId !== activeTargetId) {
+        replaceOptimisticMessage(convId, optimisticId, sent);
+      }
     } catch (err: any) {
-      setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+      if (activeTargetId) {
+        removeOptimisticMessage(activeTargetId, optimisticId);
+      }
+      if (convId !== activeTargetId) {
+        removeOptimisticMessage(convId, optimisticId);
+      }
       toast.error('Error', err.message || 'No se pudo enviar el mensaje.');
     } finally {
       setIsSending(false);
     }
   };
+
+  // Smooth scroll to quoted message and trigger flash highlight (WhatsApp / Telegram style)
+  const handleJumpToMessage = useCallback(
+    (targetMessageId: string) => {
+      const targetIndex = messages.findIndex((m) => m.id === targetMessageId);
+      if (targetIndex !== -1 && flatListRef.current) {
+        Haptics.selectionAsync().catch(() => {});
+        try {
+          flatListRef.current.scrollToIndex({
+            index: targetIndex,
+            animated: true,
+            viewPosition: 0.5,
+          });
+        } catch {
+          flatListRef.current.scrollToOffset({
+            offset: Math.max(0, targetIndex * 75),
+            animated: true,
+          });
+        }
+
+        if (highlightTimeoutRef.current) {
+          clearTimeout(highlightTimeoutRef.current);
+        }
+        setHighlightedMessageId(targetMessageId);
+        highlightTimeoutRef.current = setTimeout(() => {
+          setHighlightedMessageId(null);
+        }, 1600);
+      } else {
+        toast.info('Mensaje', 'El mensaje citado no se encuentra visible actualmente.');
+      }
+    },
+    [messages],
+  );
 
   const handleStartChatWithContact = (contact: ContactItem) => {
     setActiveTargetId(contact.conversationId || contact.id);
@@ -590,14 +531,24 @@ export default function ChatScreen() {
               style={[
                 styles.convHeader,
                 {
-                  backgroundColor: isDark ? '#161922' : '#FFFFFF',
+                  backgroundColor: colors.background,
                   borderBottomColor: colors.borderSubtle,
                 },
               ]}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
                 <ThemedTouchable
-                  onPress={() => setActiveTargetId(null)}
+                  onPress={() => {
+                    if (params.conversationId || params.id || params.targetUserId || params.orderId || params.requestId) {
+                      if (router.canGoBack()) {
+                        router.back();
+                      } else {
+                        router.replace('/(tabs)');
+                      }
+                    } else {
+                      setActiveTargetId(null);
+                    }
+                  }}
                   haptic="light"
                   style={styles.backBtn}
                 >
@@ -697,7 +648,7 @@ export default function ChatScreen() {
                   <Text
                     style={{
                       fontSize: 10,
-                      fontFamily: 'Satoshi-Bold',
+                      fontFamily: 'PlusJakartaSans-Bold',
                       color:
                         conversation.order.status === 'COMPLETED'
                           ? '#065F46'
@@ -733,7 +684,7 @@ export default function ChatScreen() {
                       <Image source={{ uri: otherParticipant.avatarUrl }} style={{ width: '100%', height: '100%' }} />
                     ) : (
                       <View style={{ width: '100%', height: '100%', backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' }}>
-                        <Text style={{ fontSize: 32, fontFamily: 'Satoshi-Black', color: colors.primary }}>
+                        <Text style={{ fontSize: 32, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.primary }}>
                           {(otherParticipant?.displayName || 'U').charAt(0).toUpperCase()}
                         </Text>
                       </View>
@@ -831,7 +782,7 @@ export default function ChatScreen() {
                 <Text
                   style={{
                     fontSize: 10,
-                    fontFamily: 'Satoshi-Bold',
+                    fontFamily: 'PlusJakartaSans-Bold',
                     color:
                       conversation.order.status === 'COMPLETED'
                         ? '#065F46'
@@ -853,23 +804,29 @@ export default function ChatScreen() {
             <View style={styles.centerLoading}>
               <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>{errorConv}</Text>
               <ThemedTouchable
-                onPress={loadConversationDetail}
+                onPress={() => loadConversationDetail(true)}
                 haptic="medium"
                 style={[styles.retryBtn, { backgroundColor: colors.primary }]}
               >
-                <Text style={{ color: '#FFFFFF', fontFamily: 'Satoshi-Bold' }}>Reintentar</Text>
+                <Text style={{ color: '#FFFFFF', fontFamily: 'PlusJakartaSans-Bold' }}>Reintentar</Text>
               </ThemedTouchable>
             </View>
           ) : (
             <FlatList
               ref={flatListRef}
               data={messages}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item, index) => item.id || `msg-${index}`}
               contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 12, gap: 10 }}
               onContentSizeChange={() =>
                 flatListRef.current?.scrollToEnd({ animated: true })
               }
               onLayout={() => flatListRef.current?.scrollToEnd({ animated: false })}
+              onScrollToIndexFailed={(info) => {
+                flatListRef.current?.scrollToOffset({
+                  offset: info.averageItemLength * info.index,
+                  animated: true,
+                });
+              }}
               renderItem={({ item }) => (
                 <MessageBubble
                   message={item}
@@ -878,6 +835,12 @@ export default function ChatScreen() {
                   onPressReaction={handleToggleReaction}
                   onPressImage={(url, caption) => setActiveImageViewer({ url, caption })}
                   currentUserId={user?.id}
+                  onSwipeReply={(msg) => {
+                    setReplyingToMessage(msg);
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                  }}
+                  onPressReplyQuote={handleJumpToMessage}
+                  isHighlighted={item.id === highlightedMessageId}
                 />
               )}
             />
@@ -896,6 +859,8 @@ export default function ChatScreen() {
               setInputText(txt);
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
             }}
+            replyingTo={replyingToMessage}
+            onCancelReply={() => setReplyingToMessage(null)}
           />
 
           {/* 5. Floating Reactions Bar on Message Long Press */}
@@ -909,6 +874,20 @@ export default function ChatScreen() {
             }}
             currentReactions={selectedMessageForReactions?.metadata?.reactions}
             currentUserId={user?.id}
+            targetMessage={selectedMessageForReactions}
+            onReplyMessage={(msg) => {
+              setReplyingToMessage(msg);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            }}
+            onDeleteMessage={(msg) => {
+              if (activeTargetId) {
+                removeOptimisticMessage(activeTargetId, msg.id);
+              }
+              if (conversation?.conversationId && conversation.conversationId !== activeTargetId) {
+                removeOptimisticMessage(conversation.conversationId, msg.id);
+              }
+              toast.info('Mensaje', 'Mensaje eliminado');
+            }}
           />
 
           {/* 6. Fullscreen Image Viewer Modal */}
@@ -942,7 +921,7 @@ export default function ChatScreen() {
                     <Image source={{ uri: otherParticipant.avatarUrl }} style={{ width: '100%', height: '100%' }} />
                   ) : (
                     <View style={{ width: '100%', height: '100%', backgroundColor: colors.primaryLight, alignItems: 'center', justifyContent: 'center' }}>
-                      <Text style={{ fontSize: 32, fontFamily: 'Satoshi-Black', color: colors.primary }}>
+                      <Text style={{ fontSize: 32, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.primary }}>
                         {(otherParticipant?.displayName || 'U').charAt(0).toUpperCase()}
                       </Text>
                     </View>
@@ -993,15 +972,31 @@ export default function ChatScreen() {
           styles.hubHeader,
           {
             paddingTop: Math.max(insets.top + 8, 20),
-            backgroundColor: isDark ? '#161922' : '#FFFFFF',
+            backgroundColor: colors.background,
             borderBottomColor: colors.borderSubtle,
           },
         ]}
       >
         <View style={styles.hubTitleRow}>
-          <Text style={[styles.hubMainTitle, { color: colors.textPrimary }]}>
-            Mensajes
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <ThemedTouchable
+              onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
+              haptic="light"
+              style={[
+                styles.headerIconBtn,
+                {
+                  backgroundColor: colors.surface,
+                  borderWidth: 1,
+                  borderColor: colors.borderSubtle,
+                },
+              ]}
+            >
+              <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
+            </ThemedTouchable>
+            <Text style={[styles.hubMainTitle, { color: colors.textPrimary }]}>
+              Mensajes
+            </Text>
+          </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <ThemedTouchable
               onPress={() => setActiveTab('CONTACTOS')}
@@ -1013,27 +1008,37 @@ export default function ChatScreen() {
           </View>
         </View>
 
-        {/* WhatsApp-Style 3-Segment Tab Bar */}
-        <View style={styles.tabBarRow}>
+        {/* Modern Segmented Capsule Tab Bar (Home Page & Apple Design) */}
+        <View
+          style={[
+            styles.tabBarRow,
+            { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9' },
+          ]}
+        >
           <ThemedTouchable
             onPress={() => setActiveTab('CHATS')}
             haptic="light"
             style={[
               styles.tabItem,
-              activeTab === 'CHATS' && [styles.activeTabItem, { borderBottomColor: colors.primary }],
+              activeTab === 'CHATS' && [
+                styles.activeTabItem,
+                { backgroundColor: isDark ? '#2D3548' : '#FFFFFF' },
+              ],
             ]}
           >
             <Text
               style={[
                 styles.tabItemText,
-                { color: activeTab === 'CHATS' ? colors.primary : colors.textSecondary },
+                { color: activeTab === 'CHATS' ? colors.textPrimary : colors.textSecondary },
               ]}
             >
               CHATS
             </Text>
             {conversationsList.length > 0 && (
-              <View style={[styles.tabBadge, { backgroundColor: colors.primary }]}>
-                <Text style={styles.tabBadgeText}>{conversationsList.length}</Text>
+              <View style={[styles.tabBadge, { backgroundColor: activeTab === 'CHATS' ? colors.primary : (isDark ? '#3F3F46' : '#E2E8F0') }]}>
+                <Text style={[styles.tabBadgeText, { color: activeTab === 'CHATS' ? '#FFFFFF' : colors.textSecondary }]}>
+                  {conversationsList.length}
+                </Text>
               </View>
             )}
           </ThemedTouchable>
@@ -1043,19 +1048,26 @@ export default function ChatScreen() {
             haptic="light"
             style={[
               styles.tabItem,
-              activeTab === 'ESTADOS' && [styles.activeTabItem, { borderBottomColor: colors.primary }],
+              activeTab === 'ESTADOS' && [
+                styles.activeTabItem,
+                { backgroundColor: isDark ? '#2D3548' : '#FFFFFF' },
+              ],
             ]}
           >
             <Text
               style={[
                 styles.tabItemText,
-                { color: activeTab === 'ESTADOS' ? colors.primary : colors.textSecondary },
+                { color: activeTab === 'ESTADOS' ? colors.textPrimary : colors.textSecondary },
               ]}
             >
               ESTADOS
             </Text>
             {storiesFeed.length > 0 && (
-              <View style={[styles.tabDot, { backgroundColor: '#10B981' }]} />
+              <View style={[styles.tabBadge, { backgroundColor: activeTab === 'ESTADOS' ? colors.primary : (isDark ? '#3F3F46' : '#E2E8F0') }]}>
+                <Text style={[styles.tabBadgeText, { color: activeTab === 'ESTADOS' ? '#FFFFFF' : colors.textSecondary }]}>
+                  {storiesFeed.length}
+                </Text>
+              </View>
             )}
           </ThemedTouchable>
 
@@ -1064,20 +1076,23 @@ export default function ChatScreen() {
             haptic="light"
             style={[
               styles.tabItem,
-              activeTab === 'CONTACTOS' && [styles.activeTabItem, { borderBottomColor: colors.primary }],
+              activeTab === 'CONTACTOS' && [
+                styles.activeTabItem,
+                { backgroundColor: isDark ? '#2D3548' : '#FFFFFF' },
+              ],
             ]}
           >
             <Text
               style={[
                 styles.tabItemText,
-                { color: activeTab === 'CONTACTOS' ? colors.primary : colors.textSecondary },
+                { color: activeTab === 'CONTACTOS' ? colors.textPrimary : colors.textSecondary },
               ]}
             >
               CONTACTOS
             </Text>
             {contactsList.length > 0 && (
-              <View style={[styles.tabBadge, { backgroundColor: colors.surfaceAlt }]}>
-                <Text style={[styles.tabBadgeText, { color: colors.textSecondary }]}>
+              <View style={[styles.tabBadge, { backgroundColor: activeTab === 'CONTACTOS' ? colors.primary : (isDark ? '#3F3F46' : '#E2E8F0') }]}>
+                <Text style={[styles.tabBadgeText, { color: activeTab === 'CONTACTOS' ? '#FFFFFF' : colors.textSecondary }]}>
                   {contactsList.length}
                 </Text>
               </View>
@@ -1095,7 +1110,7 @@ export default function ChatScreen() {
             refreshControl={
               <RefreshControl
                 refreshing={loadingConversations}
-                onRefresh={loadConversations}
+                onRefresh={() => fetchConversations(true)}
                 tintColor={colors.primary}
               />
             }
@@ -1139,8 +1154,11 @@ export default function ChatScreen() {
                   onPress={() => setActiveTargetId(item.id)}
                   haptic="light"
                   style={[
-                    styles.chatRowItem,
-                    { borderBottomColor: isDark ? '#1C202C' : '#F1F5F9' },
+                    styles.chatCardItem,
+                    {
+                      backgroundColor: isDark ? '#1C202C' : '#FFFFFF',
+                      borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+                    },
                   ]}
                 >
                   <View style={styles.chatAvatarWrap}>
@@ -1153,7 +1171,7 @@ export default function ChatScreen() {
                         </Text>
                       </View>
                     )}
-                    <View style={styles.chatOnlineDot} />
+                    <View style={[styles.chatOnlineDot, { borderColor: isDark ? '#1C202C' : '#FFFFFF' }]} />
                     {other?.isPro && (
                       <View style={styles.chatProBadge}>
                         <Ionicons name="checkmark" size={7} color="#FFFFFF" />
@@ -1161,7 +1179,7 @@ export default function ChatScreen() {
                     )}
                   </View>
 
-                  <View style={{ flex: 1 }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
                     <View style={styles.chatNameRow}>
                       <Text numberOfLines={1} style={[styles.chatNameText, { color: colors.textPrimary }]}>
                         {other?.displayName || 'Conversación Yewi'}
@@ -1172,13 +1190,13 @@ export default function ChatScreen() {
                     </View>
 
                     <View style={styles.chatSnippetRow}>
-                      <Text numberOfLines={1} style={[styles.chatSnippetText, { color: colors.textSecondary }]}>
+                      <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.chatSnippetText, { color: colors.textSecondary }]}>
                         {lastMsg?.content || 'Pulsa para ver los mensajes'}
                       </Text>
                       {item.order && (
-                        <View style={[styles.orderTag, { backgroundColor: colors.primaryLight }]}>
-                          <Text style={[styles.orderTagText, { color: colors.primary }]}>
-                            #{item.order.orderNumber}
+                        <View style={[styles.orderTag, { backgroundColor: isDark ? 'rgba(2, 132, 199, 0.2)' : '#E0F2FE' }]}>
+                          <Text style={[styles.orderTagText, { color: '#0284C7' }]}>
+                            Pedido
                           </Text>
                         </View>
                       )}
@@ -1208,43 +1226,12 @@ export default function ChatScreen() {
             refreshControl={
               <RefreshControl
                 refreshing={loadingStories}
-                onRefresh={loadStories}
+                onRefresh={() => fetchStories(true)}
                 tintColor={colors.primary}
               />
             }
             contentContainerStyle={{ paddingVertical: 14, paddingBottom: 90 }}
           >
-            {/* Mi Estado Row */}
-            <ThemedTouchable
-              onPress={() => setIsCreateStatusOpen(true)}
-              haptic="medium"
-              style={[styles.myStatusRow, { borderBottomColor: isDark ? '#1C202C' : '#F1F5F9' }]}
-            >
-              <View style={styles.myStatusAvatarWrap}>
-                {user?.avatarUrl ? (
-                  <Image source={{ uri: user.avatarUrl }} style={styles.myStatusAvatar} contentFit="cover" />
-                ) : (
-                  <View style={[styles.myStatusPlaceholder, { backgroundColor: colors.primaryLight }]}>
-                    <Ionicons name="person" size={24} color={colors.primary} />
-                  </View>
-                )}
-                <View style={[styles.myStatusPlusBadge, { backgroundColor: colors.primary }]}>
-                  <Ionicons name="add" size={14} color="#FFFFFF" />
-                </View>
-              </View>
-
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.myStatusTitle, { color: colors.textPrimary }]}>
-                  Mi estado
-                </Text>
-                <Text style={[styles.myStatusSubtitle, { color: colors.textSecondary }]}>
-                  {user?.isPro || (user as any)?.professionalProfile?.isPro
-                    ? 'Añade una actualización de tus trabajos'
-                    : 'Desbloquea historias con Yewi Pro'}
-                </Text>
-              </View>
-            </ThemedTouchable>
-
             {/* Estados Recientes & Vistos */}
             {(() => {
               const recentStories = storiesFeed.filter((g) => !isGroupSeen(g.statuses.map((s) => s.id)));
@@ -1279,23 +1266,29 @@ export default function ChatScreen() {
                           key={group.authorId}
                           onPress={() => setSelectedStoryGroup(group)}
                           haptic="medium"
-                          style={[styles.storyRowItem, { borderBottomColor: isDark ? '#1C202C' : '#F1F5F9' }]}
+                          style={[
+                            styles.chatCardItem,
+                            {
+                              backgroundColor: isDark ? '#1C202C' : '#FFFFFF',
+                              borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+                            },
+                          ]}
                         >
-                          <View style={[styles.storyRingWrap, { borderColor: colors.primary, borderWidth: 2.5 }]}>
+                          <View style={[styles.storyRingWrap, { borderColor: colors.primary, borderWidth: 2 }]}>
                             {group.authorAvatar ? (
                               <Image source={{ uri: group.authorAvatar }} style={styles.storyRowAvatar} contentFit="cover" />
                             ) : (
                               <View style={[styles.storyRowPlaceholder, { backgroundColor: colors.primaryLight }]}>
-                                <Text style={{ fontSize: 16, fontFamily: 'Satoshi-Bold', color: colors.primary }}>
+                                <Text style={{ fontSize: 16, fontFamily: 'PlusJakartaSans-Bold', color: colors.primary }}>
                                   {(group.businessName || group.authorName).charAt(0).toUpperCase()}
                                 </Text>
                               </View>
                             )}
                           </View>
 
-                          <View style={{ flex: 1 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                              <Text numberOfLines={1} style={[styles.storyRowName, { color: colors.textPrimary }]}>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <Text numberOfLines={1} style={[styles.chatNameText, { color: colors.textPrimary }]}>
                                 {group.businessName || group.authorName}
                               </Text>
                               {group.isPro && (
@@ -1304,7 +1297,7 @@ export default function ChatScreen() {
                                 </View>
                               )}
                             </View>
-                            <Text style={[styles.storyRowCategory, { color: colors.textSecondary }]}>
+                            <Text numberOfLines={1} style={[styles.storyRowCategory, { color: colors.textSecondary }]}>
                               {group.category || 'Profesional'} · {group.statuses.length} {group.statuses.length === 1 ? 'estado' : 'estados'}
                             </Text>
                           </View>
@@ -1326,23 +1319,30 @@ export default function ChatScreen() {
                           key={group.authorId}
                           onPress={() => setSelectedStoryGroup(group)}
                           haptic="medium"
-                          style={[styles.storyRowItem, { borderBottomColor: isDark ? '#1C202C' : '#F1F5F9', opacity: 0.82 }]}
+                          style={[
+                            styles.chatCardItem,
+                            {
+                              backgroundColor: isDark ? '#1C202C' : '#FFFFFF',
+                              borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+                              opacity: 0.85,
+                            },
+                          ]}
                         >
                           <View style={[styles.storyRingWrap, { borderColor: isDark ? '#3F3F46' : '#CBD5E1', borderWidth: 1.5 }]}>
                             {group.authorAvatar ? (
                               <Image source={{ uri: group.authorAvatar }} style={styles.storyRowAvatar} contentFit="cover" />
                             ) : (
                               <View style={[styles.storyRowPlaceholder, { backgroundColor: colors.primaryLight }]}>
-                                <Text style={{ fontSize: 16, fontFamily: 'Satoshi-Bold', color: colors.primary }}>
+                                <Text style={{ fontSize: 16, fontFamily: 'PlusJakartaSans-Bold', color: colors.primary }}>
                                   {(group.businessName || group.authorName).charAt(0).toUpperCase()}
                                 </Text>
                               </View>
                             )}
                           </View>
 
-                          <View style={{ flex: 1 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                              <Text numberOfLines={1} style={[styles.storyRowName, { color: colors.textPrimary }]}>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <Text numberOfLines={1} style={[styles.chatNameText, { color: colors.textPrimary }]}>
                                 {group.businessName || group.authorName}
                               </Text>
                               {group.isPro && (
@@ -1351,7 +1351,7 @@ export default function ChatScreen() {
                                 </View>
                               )}
                             </View>
-                            <Text style={[styles.storyRowCategory, { color: colors.textSecondary }]}>
+                            <Text numberOfLines={1} style={[styles.storyRowCategory, { color: colors.textSecondary }]}>
                               {group.category || 'Profesional'} · {group.statuses.length} {group.statuses.length === 1 ? 'estado' : 'estados'}
                             </Text>
                           </View>
@@ -1363,15 +1363,6 @@ export default function ChatScreen() {
               );
             })()}
           </ScrollView>
-
-          {/* Floating Action Button for New Status */}
-          <ThemedTouchable
-            onPress={() => setIsCreateStatusOpen(true)}
-            haptic="medium"
-            style={[styles.floatingActionBtn, { backgroundColor: colors.primary }]}
-          >
-            <Ionicons name="camera" size={24} color="#FFFFFF" />
-          </ThemedTouchable>
         </View>
       )}
 
@@ -1401,7 +1392,7 @@ export default function ChatScreen() {
             refreshControl={
               <RefreshControl
                 refreshing={loadingContacts}
-                onRefresh={loadContacts}
+                onRefresh={() => fetchContacts(true)}
                 tintColor={colors.primary}
               />
             }
@@ -1424,8 +1415,11 @@ export default function ChatScreen() {
                 onPress={() => handleStartChatWithContact(item)}
                 haptic="light"
                 style={[
-                  styles.contactRowItem,
-                  { borderBottomColor: isDark ? '#1C202C' : '#F1F5F9' },
+                  styles.chatCardItem,
+                  {
+                    backgroundColor: isDark ? '#1C202C' : '#FFFFFF',
+                    borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
+                  },
                 ]}
               >
                 <View style={styles.contactAvatarWrap}>
@@ -1445,15 +1439,15 @@ export default function ChatScreen() {
                   )}
                 </View>
 
-                <View style={{ flex: 1 }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                     <Text numberOfLines={1} style={[styles.contactName, { color: colors.textPrimary }]}>
                       {item.displayName}
                     </Text>
                     {item.rating > 0 && (
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                        <Ionicons name="star" size={12} color="#F59E0B" />
-                        <Text style={{ fontSize: 12, fontFamily: 'Satoshi-Bold', color: colors.textPrimary }}>
+                        <Ionicons name="star" size={12} color="#10B981" />
+                        <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
                           {item.rating.toFixed(1)}
                         </Text>
                       </View>
@@ -1485,8 +1479,8 @@ export default function ChatScreen() {
         storyGroup={selectedStoryGroup}
         onClose={() => setSelectedStoryGroup(null)}
         onStoryUpdated={() => {
-          loadStories();
-          loadConversations();
+          fetchStories(true);
+          fetchConversations(true);
         }}
         onOpenChatWithUser={(targetUserId, targetName, initialMsg) => {
           setSelectedStoryGroup(null);
@@ -1496,17 +1490,6 @@ export default function ChatScreen() {
           setActiveTargetId(targetUserId);
         }}
       />
-
-      <CreateStatusModal
-        visible={isCreateStatusOpen}
-        onClose={() => setIsCreateStatusOpen(false)}
-        onStatusCreated={() => {
-          loadStories();
-          loadConversations();
-        }}
-      />
-
-      <FloatingActionButton />
     </View>
   );
 }
@@ -1549,7 +1532,7 @@ const styles = StyleSheet.create({
   },
   convAvatarInitial: {
     fontSize: 16,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
   },
   convProBadge: {
     position: 'absolute',
@@ -1566,11 +1549,11 @@ const styles = StyleSheet.create({
   },
   convNameText: {
     fontSize: 15,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
   },
   convStatusText: {
     fontSize: 11.5,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans-Medium',
   },
   infoBtn: {
     padding: 6,
@@ -1585,7 +1568,7 @@ const styles = StyleSheet.create({
   },
   orderBannerNumber: {
     fontSize: 12.5,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
   },
   orderStatusPill: {
     paddingHorizontal: 8,
@@ -1630,12 +1613,12 @@ const styles = StyleSheet.create({
   },
   storyQuoteLabel: {
     fontSize: 11,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
     marginBottom: 2,
   },
   storyQuoteCaption: {
     fontSize: 12,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Regular',
   },
   storyQuoteThumb: {
     width: 38,
@@ -1651,7 +1634,7 @@ const styles = StyleSheet.create({
   },
   messageContent: {
     fontSize: 14,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Regular',
     lineHeight: 20,
   },
   messageMeta: {
@@ -1663,7 +1646,7 @@ const styles = StyleSheet.create({
   },
   messageTime: {
     fontSize: 10,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Regular',
   },
   inputBar: {
     flexDirection: 'row',
@@ -1683,7 +1666,7 @@ const styles = StyleSheet.create({
   },
   mainInput: {
     fontSize: 14,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Regular',
     padding: 0,
   },
   sendBtn: {
@@ -1705,7 +1688,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 17,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
   },
   modalAvatarLarge: {
     width: 90,
@@ -1716,7 +1699,7 @@ const styles = StyleSheet.create({
   },
   modalName: {
     fontSize: 20,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
     marginBottom: 4,
   },
   modalProTag: {
@@ -1731,12 +1714,12 @@ const styles = StyleSheet.create({
   },
   modalProTagText: {
     fontSize: 12,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
     color: '#10B981',
   },
   modalCity: {
     fontSize: 13,
-    fontFamily: 'Satoshi-Medium',
+    fontFamily: 'PlusJakartaSans-Medium',
     marginBottom: 16,
   },
   modalBioBox: {
@@ -1747,7 +1730,7 @@ const styles = StyleSheet.create({
   },
   modalBioText: {
     fontSize: 13.5,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Regular',
     lineHeight: 20,
   },
 
@@ -1767,7 +1750,7 @@ const styles = StyleSheet.create({
   },
   hubMainTitle: {
     fontSize: 26,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
     letterSpacing: -0.5,
   },
   headerIconBtn: {
@@ -1779,7 +1762,11 @@ const styles = StyleSheet.create({
   },
   tabBarRow: {
     flexDirection: 'row',
-    paddingHorizontal: 12,
+    marginHorizontal: 16,
+    padding: 4,
+    borderRadius: 14,
+    gap: 6,
+    marginBottom: 8,
   },
   tabItem: {
     flex: 1,
@@ -1787,25 +1774,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 11,
-    borderBottomWidth: 2.5,
-    borderBottomColor: 'transparent',
+    paddingVertical: 8,
+    borderRadius: 11,
   },
-  activeTabItem: {},
+  activeTabItem: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
   tabItemText: {
-    fontSize: 13,
-    fontFamily: 'Satoshi-Bold',
-    letterSpacing: 0.5,
+    fontSize: 12.5,
+    fontFamily: 'PlusJakartaSans-Bold',
+    letterSpacing: 0.3,
   },
   tabBadge: {
     paddingHorizontal: 6,
     paddingVertical: 1.5,
-    borderRadius: 10,
+    borderRadius: 999,
   },
   tabBadgeText: {
     fontSize: 10,
-    fontFamily: 'Satoshi-Bold',
-    color: '#FFFFFF',
+    fontFamily: 'PlusJakartaSans-Bold',
   },
   tabDot: {
     width: 7,
@@ -1828,13 +1819,13 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 18,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
     textAlign: 'center',
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 13.5,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Regular',
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 24,
@@ -1850,7 +1841,22 @@ const styles = StyleSheet.create({
   emptyBtnText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
+  },
+  chatCardItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginVertical: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 5,
+    elevation: 2,
+    gap: 12,
   },
   chatRowItem: {
     flexDirection: 'row',
@@ -1861,9 +1867,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   chatAvatarWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     position: 'relative',
   },
   chatOnlineDot: {
@@ -1895,18 +1901,18 @@ const styles = StyleSheet.create({
   chatAvatar: {
     width: '100%',
     height: '100%',
-    borderRadius: 26,
+    borderRadius: 24,
   },
   chatAvatarPlaceholder: {
     width: '100%',
     height: '100%',
-    borderRadius: 26,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },
   chatInitial: {
-    fontSize: 20,
-    fontFamily: 'Satoshi-Black',
+    fontSize: 18,
+    fontFamily: 'PlusJakartaSans-ExtraBold',
   },
   chatProBadge: {
     position: 'absolute',
@@ -1928,32 +1934,36 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   chatNameText: {
-    fontSize: 15.5,
-    fontFamily: 'Satoshi-Bold',
-    maxWidth: '75%',
+    fontSize: 15,
+    fontFamily: 'PlusJakartaSans-Bold',
+    flex: 1,
+    marginRight: 8,
   },
   chatTimeText: {
     fontSize: 11,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Medium',
+    flexShrink: 0,
   },
   chatSnippetRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
   chatSnippetText: {
-    fontSize: 13.5,
-    fontFamily: 'Satoshi-Regular',
-    maxWidth: '75%',
+    fontSize: 13,
+    fontFamily: 'PlusJakartaSans-Regular',
+    flex: 1,
   },
   orderTag: {
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 999,
+    flexShrink: 0,
   },
   orderTagText: {
     fontSize: 10,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
   },
   myStatusRow: {
     flexDirection: 'row',
@@ -1995,11 +2005,11 @@ const styles = StyleSheet.create({
   },
   myStatusTitle: {
     fontSize: 15.5,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
   },
   myStatusSubtitle: {
     fontSize: 12.5,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Regular',
     marginTop: 2,
   },
   storiesSectionHeader: {
@@ -2009,7 +2019,7 @@ const styles = StyleSheet.create({
   },
   storiesSectionTitle: {
     fontSize: 11.5,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
     letterSpacing: 0.6,
   },
   emptyStoriesContainer: {
@@ -2020,11 +2030,11 @@ const styles = StyleSheet.create({
   },
   emptyStoriesTitle: {
     fontSize: 15,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
   },
   emptyStoriesSubtitle: {
     fontSize: 12.5,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Regular',
     textAlign: 'center',
     lineHeight: 18,
   },
@@ -2058,7 +2068,7 @@ const styles = StyleSheet.create({
   },
   storyRowName: {
     fontSize: 15,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
   },
   proChipSmall: {
     backgroundColor: '#10B981',
@@ -2069,11 +2079,11 @@ const styles = StyleSheet.create({
   proChipSmallText: {
     color: '#FFFFFF',
     fontSize: 9,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
   },
   storyRowCategory: {
     fontSize: 12,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Regular',
     marginTop: 2,
   },
   contactSearchWrap: {
@@ -2090,7 +2100,7 @@ const styles = StyleSheet.create({
   contactSearchInput: {
     flex: 1,
     fontSize: 13.5,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Regular',
     padding: 0,
   },
   contactRowItem: {
@@ -2121,7 +2131,7 @@ const styles = StyleSheet.create({
   },
   contactInitial: {
     fontSize: 18,
-    fontFamily: 'Satoshi-Black',
+    fontFamily: 'PlusJakartaSans-ExtraBold',
   },
   contactProBadge: {
     position: 'absolute',
@@ -2138,12 +2148,12 @@ const styles = StyleSheet.create({
   },
   contactName: {
     fontSize: 15,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
     maxWidth: '70%',
   },
   contactCategory: {
     fontSize: 12,
-    fontFamily: 'Satoshi-Regular',
+    fontFamily: 'PlusJakartaSans-Regular',
     marginTop: 2,
   },
   startChatBtn: {
@@ -2157,6 +2167,6 @@ const styles = StyleSheet.create({
   startChatBtnText: {
     color: '#FFFFFF',
     fontSize: 12,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
   },
 });

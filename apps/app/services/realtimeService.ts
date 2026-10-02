@@ -208,11 +208,7 @@ class RealtimeService {
   }
 
   private async refreshSubscription() {
-    const subscription = await paymentsApi.getSubscriptionStatus();
-    this.emit('subscription:updated', {
-      userId: useAuthStore.getState().user?.id || '',
-      ...subscription,
-    });
+    // Escrow model: subscriptions are removed in favor of 15% escrow custody
   }
 
   private emit(name: 'notification:new', payload: NotificationItem): void;

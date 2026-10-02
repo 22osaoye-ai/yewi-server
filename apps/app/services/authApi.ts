@@ -59,11 +59,27 @@ function mapBackendResponse(rawRes: any): AuthResult {
     throw new Error('La respuesta de autenticación no contiene una sesión válida.');
   }
 
+  let firstName = profile?.firstName ?? profile?.displayName?.split(' ')[0] ?? '';
+  let lastName = profile?.lastName ?? profile?.displayName?.split(' ').slice(1).join(' ') ?? '';
+
+  const isGeneric =
+    (!firstName && !lastName) ||
+    (firstName.toLowerCase() === 'usuario' && (!lastName || lastName.toLowerCase() === 'google')) ||
+    profile?.displayName?.toLowerCase() === 'usuario google' ||
+    profile?.displayName?.toLowerCase() === 'usuario de google';
+
+  if (isGeneric && user.email) {
+    const emailPrefix = user.email.split('@')[0].replace(/[._-]+/g, ' ').trim();
+    const parts = emailPrefix.split(/\s+/).filter(Boolean);
+    firstName = parts[0] ? parts[0].charAt(0).toUpperCase() + parts[0].slice(1) : 'Usuario';
+    lastName = parts.slice(1).map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+  }
+
   const domainUser: UserProfile = {
     id: user.id,
     email: user.email,
-    firstName: profile?.firstName ?? profile?.displayName?.split(' ')[0] ?? '',
-    lastName: profile?.lastName ?? profile?.displayName?.split(' ').slice(1).join(' ') ?? '',
+    firstName: firstName || 'Usuario',
+    lastName: lastName || '',
     roles: user.roles,
     avatarUrl: profile?.avatarUrl,
     phoneNumber: profile?.phoneNumber,
@@ -234,5 +250,36 @@ export const authApi = {
     await apiRequest('/users/me', {
       method: 'DELETE',
     });
+  },
+
+  // 11. Comprobar disponibilidad en tiempo real de email, teléfono y NIF/CIF (Ultra-rápido estilo Google/GitHub)
+  async checkAvailability(
+    params: {
+      email?: string;
+      phoneNumber?: string;
+      country?: string;
+      taxId?: string;
+    },
+    signal?: AbortSignal
+  ): Promise<{
+    email?: { available: boolean; message: string };
+    phoneNumber?: { available: boolean; message: string; formatted?: string };
+    taxId?: { available: boolean; message: string };
+  }> {
+    try {
+      const res = await apiRequest<any>('/auth/check-availability', {
+        method: 'POST',
+        body: JSON.stringify(params),
+        timeoutMs: 1500,
+        noRetry: true,
+        signal,
+      });
+      const data = res?.data || res;
+      return data || {};
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return {};
+      console.warn('[authApi.checkAvailability] Respuesta omitida:', err?.message);
+      return {};
+    }
   },
 };

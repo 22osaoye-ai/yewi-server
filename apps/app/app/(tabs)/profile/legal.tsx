@@ -18,7 +18,7 @@ export default function LegalRoute() {
   return (
     <>
       <LegalScreen
-        onBack={() => router.back()}
+        onBack={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/profile'))}
         onShowAlert={(title, message) =>
           setAlertConfig({ visible: true, title, message })
         }

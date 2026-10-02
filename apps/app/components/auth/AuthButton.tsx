@@ -88,7 +88,7 @@ export function AuthButton({
             style={[
               {
                 color: getTextColor(),
-                fontFamily: 'Satoshi-Bold',
+                fontFamily: 'PlusJakartaSans-Bold',
                 fontSize: 16,
                 letterSpacing: -0.2,
               },

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, {
   Easing,
@@ -16,12 +16,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useRealtimeStore } from '@/store/useRealtimeStore';
+import { useUserRole } from '@/hooks/useUserRole';
+import { toast } from '@/store/useToastStore';
 
 export const FloatingActionButton = () => {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { colors, isDark } = useAppTheme();
   const unreadCount = useRealtimeStore((state) => state.unreadCount);
+  const { user, isAuthenticated, isProfessional, isClient } = useUserRole();
 
   // Spacing comfortably positioned above the floating tab bar
   const BASE_BOTTOM = Math.max(insets.bottom, 16) + 85;
@@ -29,12 +32,10 @@ export const FloatingActionButton = () => {
   const firstValue = useSharedValue(BASE_BOTTOM);
   const secondValue = useSharedValue(BASE_BOTTOM);
   const thirdValue = useSharedValue(BASE_BOTTOM);
-  const fourthValue = useSharedValue(BASE_BOTTOM);
 
   const firstWidth = useSharedValue(56);
   const secondWidth = useSharedValue(56);
   const thirdWidth = useSharedValue(56);
-  const fourthWidth = useSharedValue(56);
 
   const isOpen = useSharedValue(false);
   const opacity = useSharedValue(0);
@@ -46,7 +47,7 @@ export const FloatingActionButton = () => {
   const handlePress = () => {
     const config = {
       easing: Easing.bezier(0.68, -0.6, 0.32, 1.6),
-      duration: 400,
+      duration: 350,
     };
 
     if (isOpen.value) {
@@ -59,22 +60,17 @@ export const FloatingActionButton = () => {
       thirdWidth.value = withTiming(56, { duration: 100 }, (finish) => {
         if (finish) thirdValue.value = withDelay(80, withTiming(BASE_BOTTOM, config));
       });
-      fourthWidth.value = withTiming(56, { duration: 100 }, (finish) => {
-        if (finish) fourthValue.value = withDelay(120, withTiming(BASE_BOTTOM, config));
-      });
       opacity.value = withTiming(0, { duration: 100 });
     } else {
-      firstValue.value = withDelay(250, withSpring(BASE_BOTTOM + 65));
-      secondValue.value = withDelay(180, withSpring(BASE_BOTTOM + 130));
-      thirdValue.value = withDelay(100, withSpring(BASE_BOTTOM + 195));
-      fourthValue.value = withSpring(BASE_BOTTOM + 260);
+      firstValue.value = withDelay(140, withSpring(BASE_BOTTOM + 65));
+      secondValue.value = withDelay(70, withSpring(BASE_BOTTOM + 130));
+      thirdValue.value = withSpring(BASE_BOTTOM + 195);
 
-      firstWidth.value = withDelay(500, withSpring(170));
-      secondWidth.value = withDelay(420, withSpring(170));
-      thirdWidth.value = withDelay(340, withSpring(170));
-      fourthWidth.value = withDelay(260, withSpring(170));
+      firstWidth.value = withDelay(380, withSpring(146));
+      secondWidth.value = withDelay(300, withSpring(146));
+      thirdWidth.value = withDelay(220, withSpring(146));
 
-      opacity.value = withDelay(450, withSpring(1));
+      opacity.value = withDelay(280, withSpring(1));
     }
     isOpen.value = !isOpen.value;
   };
@@ -97,9 +93,6 @@ export const FloatingActionButton = () => {
   }));
   const thirdWidthStyle = useAnimatedStyle(() => ({
     width: thirdWidth.value,
-  }));
-  const fourthWidthStyle = useAnimatedStyle(() => ({
-    width: fourthWidth.value,
   }));
 
   const firstIcon = useAnimatedStyle(() => {
@@ -141,19 +134,6 @@ export const FloatingActionButton = () => {
     };
   });
 
-  const fourthIcon = useAnimatedStyle(() => {
-    const scale = interpolate(
-      fourthValue.value,
-      [BASE_BOTTOM, BASE_BOTTOM + 260],
-      [0, 1],
-      Extrapolation.CLAMP
-    );
-    return {
-      bottom: fourthValue.value,
-      transform: [{ scale }],
-    };
-  });
-
   const plusIcon = useAnimatedStyle(() => ({
     transform: [{ rotate: `${progress.value * 45}deg` }],
   }));
@@ -162,156 +142,182 @@ export const FloatingActionButton = () => {
   const itemBorder = isDark ? '#2E2E34' : '#F1F5F9';
 
   return (
-    <View style={styles.container} pointerEvents="box-none">
-      {/* Fourth Action: Notificaciones */}
-      <Animated.View
-        style={[
-          styles.contentContainer,
-          fourthIcon,
-          fourthWidthStyle,
-          { backgroundColor: itemBg, borderColor: itemBorder },
-        ]}
-      >
-        <Pressable
-          style={styles.actionPressable}
-          onPress={() => {
-            closeMenu();
-            router.push('/notifications');
-          }}
-        >
-          <View style={styles.iconContainer}>
-            <Ionicons name="notifications-outline" size={22} color={colors.primary} />
-            {unreadCount > 0 && (
-              <View
-                style={{
-                  position: 'absolute',
-                  top: 10,
-                  right: 10,
-                  minWidth: 16,
-                  height: 16,
-                  borderRadius: 8,
-                  backgroundColor: '#EF4444',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  paddingHorizontal: 3,
-                }}
-              >
-                <Animated.Text style={{ color: '#FFFFFF', fontSize: 9, fontFamily: 'Satoshi-Black' }}>
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </Animated.Text>
-              </View>
-            )}
-          </View>
-          <Animated.Text
-            style={[styles.text, opacityText, { color: colors.textPrimary }]}
-            numberOfLines={1}
-          >
-            Notificaciones
-          </Animated.Text>
-        </Pressable>
-      </Animated.View>
+    <>
+      <View style={styles.container} pointerEvents="box-none">
+        {/* 
+          Both CLIENT and PROFESSIONAL have 3 options:
+          - thirdIcon (195): Mensajes (Both)
+          - secondIcon (130): Buscar (Both)
+          - firstIcon (65): 
+              * Client: "Solicitud" (navigates to /(tabs)/requests)
+              * Professional: "Publicar proyecto" (opens PublishProjectModal)
+        */}
 
-      {/* Third Action: Mensajes / Chat */}
-      <Animated.View
-        style={[
-          styles.contentContainer,
-          thirdIcon,
-          thirdWidthStyle,
-          { backgroundColor: itemBg, borderColor: itemBorder },
-        ]}
-      >
-        <Pressable
-          style={styles.actionPressable}
-          onPress={() => {
-            closeMenu();
-            router.push('/chat');
-          }}
+        {/* --- Action 3: Mensajes (Both, top position) --- */}
+        <Animated.View
+          style={[
+            styles.contentContainer,
+            thirdIcon,
+            thirdWidthStyle,
+            { backgroundColor: itemBg, borderColor: itemBorder },
+          ]}
         >
-          <View style={styles.iconContainer}>
-            <Ionicons name="chatbubbles-outline" size={22} color={colors.primary} />
-          </View>
-          <Animated.Text
-            style={[styles.text, opacityText, { color: colors.textPrimary }]}
-            numberOfLines={1}
+          <Pressable
+            style={styles.actionPressable}
+            onPress={() => {
+              closeMenu();
+              if (!isAuthenticated) {
+                router.push('/auth/login');
+                return;
+              }
+              router.push('/chat');
+            }}
           >
-            Mensajes
-          </Animated.Text>
-        </Pressable>
-      </Animated.View>
-
-      {/* Second Action: Buscar */}
-      <Animated.View
-        style={[
-          styles.contentContainer,
-          secondIcon,
-          secondWidthStyle,
-          { backgroundColor: itemBg, borderColor: itemBorder },
-        ]}
-      >
-        <Pressable
-          style={styles.actionPressable}
-          onPress={() => {
-            closeMenu();
-            router.push('/(tabs)/search');
-          }}
-        >
-          <View style={styles.iconContainer}>
-            <Ionicons name="search-outline" size={22} color={colors.primary} />
-          </View>
-          <Animated.Text
-            style={[styles.text, opacityText, { color: colors.textPrimary }]}
-            numberOfLines={1}
-          >
-            Buscar
-          </Animated.Text>
-        </Pressable>
-      </Animated.View>
-
-      {/* First Action: Solicitud */}
-      <Animated.View
-        style={[
-          styles.contentContainer,
-          firstIcon,
-          firstWidthStyle,
-          { backgroundColor: itemBg, borderColor: itemBorder },
-        ]}
-      >
-        <Pressable
-          style={styles.actionPressable}
-          onPress={() => {
-            closeMenu();
-            router.push('/(tabs)/requests');
-          }}
-        >
-          <View style={styles.iconContainer}>
-            <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
-          </View>
-          <Animated.Text
-            style={[styles.text, opacityText, { color: colors.textPrimary }]}
-            numberOfLines={1}
-          >
-            Solicitud
-          </Animated.Text>
-        </Pressable>
-      </Animated.View>
-
-      {/* Main Trigger FAB */}
-      <Pressable
-        style={[
-          styles.contentContainer,
-          {
-            bottom: BASE_BOTTOM,
-            backgroundColor: colors.primary,
-            borderColor: colors.primary,
-          },
-        ]}
-        onPress={handlePress}
-      >
-        <Animated.View style={[styles.iconContainer, plusIcon]}>
-          <Ionicons name="add" size={28} color="#FFFFFF" />
+            <View style={styles.iconContainer}>
+              <Ionicons name="chatbubbles-outline" size={22} color={colors.primary} />
+              {unreadCount > 0 && (
+                <View
+                  style={{
+                    position: 'absolute',
+                    top: 10,
+                    right: 10,
+                    minWidth: 16,
+                    height: 16,
+                    borderRadius: 8,
+                    backgroundColor: '#EF4444',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingHorizontal: 3,
+                  }}
+                >
+                  <Animated.Text style={{ color: '#FFFFFF', fontSize: 9, fontFamily: 'PlusJakartaSans-ExtraBold' }}>
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </Animated.Text>
+                </View>
+              )}
+            </View>
+            <Animated.Text
+              style={[styles.text, opacityText, { color: colors.textPrimary }]}
+              numberOfLines={1}
+            >
+              Mensajes
+            </Animated.Text>
+          </Pressable>
         </Animated.View>
-      </Pressable>
-    </View>
+
+        {/* --- Action 2: Buscar (Both, middle position) --- */}
+        <Animated.View
+          style={[
+            styles.contentContainer,
+            secondIcon,
+            secondWidthStyle,
+            { backgroundColor: itemBg, borderColor: itemBorder },
+          ]}
+        >
+          <Pressable
+            style={styles.actionPressable}
+            onPress={() => {
+              closeMenu();
+              router.push('/(tabs)/search');
+            }}
+          >
+            <View style={styles.iconContainer}>
+              <Ionicons name="search-outline" size={22} color={colors.primary} />
+            </View>
+            <Animated.Text
+              style={[styles.text, opacityText, { color: colors.textPrimary }]}
+              numberOfLines={1}
+            >
+              Buscar
+            </Animated.Text>
+          </Pressable>
+        </Animated.View>
+
+        {/* --- Action 1: Role-specific action (Bottom position above FAB) --- */}
+        {isClient ? (
+          /* Client: Crear Solicitud */
+          <Animated.View
+            style={[
+              styles.contentContainer,
+              firstIcon,
+              firstWidthStyle,
+              { backgroundColor: itemBg, borderColor: itemBorder },
+            ]}
+          >
+            <Pressable
+              style={styles.actionPressable}
+              onPress={() => {
+                closeMenu();
+                if (!isAuthenticated) {
+                  router.push('/auth/login');
+                  return;
+                }
+                router.push({ pathname: '/publish', params: { type: 'request' } });
+              }}
+            >
+              <View style={styles.iconContainer}>
+                <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
+              </View>
+              <Animated.Text
+                style={[styles.text, opacityText, { color: colors.textPrimary }]}
+                numberOfLines={1}
+              >
+                Solicitud
+              </Animated.Text>
+            </Pressable>
+          </Animated.View>
+        ) : (
+          /* Professional: Publicar Servicio (Fiverr Gig de precio cerrado) */
+          <Animated.View
+            style={[
+              styles.contentContainer,
+              firstIcon,
+              firstWidthStyle,
+              { backgroundColor: itemBg, borderColor: itemBorder },
+            ]}
+          >
+            <Pressable
+              style={styles.actionPressable}
+              onPress={() => {
+                closeMenu();
+                if (!isAuthenticated) {
+                  router.push('/auth/login');
+                  return;
+                }
+                router.push({ pathname: '/publish', params: { type: 'service' } });
+              }}
+            >
+              <View style={styles.iconContainer}>
+                <Ionicons name="add" size={24} color={colors.primary} />
+              </View>
+              <Animated.Text
+                style={[styles.text, opacityText, { color: colors.textPrimary }]}
+                numberOfLines={1}
+              >
+                Servicio
+              </Animated.Text>
+            </Pressable>
+          </Animated.View>
+        )}
+
+        {/* Main Trigger FAB */}
+        <Pressable
+          style={[
+            styles.contentContainer,
+            {
+              bottom: BASE_BOTTOM,
+              backgroundColor: colors.primary,
+              borderColor: colors.primary,
+            },
+          ]}
+          onPress={handlePress}
+        >
+          <Animated.View style={[styles.iconContainer, plusIcon]}>
+            <Ionicons name="add" size={28} color="#FFFFFF" />
+          </Animated.View>
+        </Pressable>
+      </View>
+    </>
   );
 };
 
@@ -319,7 +325,7 @@ export default FloatingActionButton;
 
 const styles = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 99,
   },
   contentContainer: {
@@ -350,7 +356,7 @@ const styles = StyleSheet.create({
   },
   text: {
     fontSize: 14,
-    fontFamily: 'Satoshi-Bold',
+    fontFamily: 'PlusJakartaSans-Bold',
     paddingRight: 16,
   },
 });
