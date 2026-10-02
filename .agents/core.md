@@ -37,11 +37,24 @@
   - El código está verificado (compilación, tipos, lógica).
 - **Detenerse de inmediato**: No continuar refactorizando ni añadiendo funcionalidades no solicitadas una vez cumplido el objetivo.
 
-## 6. Regla Obligatoria del Modelo de Negocio y Pro
-- Yewi monetiza el acceso profesional mediante una suscripción mensual **Pro**.
-- **Pro solo puede activarse** después de procesar y validar un webhook de Stripe con firma verificable y de comprobar en Stripe que la suscripción correspondiente está en estado `ACTIVE` o `TRIALING`.
-- La fuente de verdad del acceso Pro es el estado verificable de Stripe, persistido por el backend. `User.isPro`, `ProfessionalProfile.isPro` y cualquier flag local son únicamente derivados, nunca autorizan por sí mismos.
-- Roles, flags locales, OTP maestro, emails, claims no verificados, parámetros de cliente o payloads enviados por el usuario **no conceden beneficios Pro**.
-- Los eventos `payment_failed` y `canceled` deben revocar el acceso Pro; no se debe conservar acceso por caché, estado local o tolerancia indefinida.
-- No usar créditos para desbloquear leads/clientes ni para enviar presupuestos.
-- Antes de confirmar cualquier cambio, los agentes deben mostrar pruebas funcionales y de seguridad, incluyendo escenarios suscrito/no suscrito, intentos de bypass y el estado de Stripe verificado, sin exponer secretos.
+## 6. Regla Obligatoria del Modelo de Negocio (Custodia Escrow & 15% Comisión)
+- Yewi monetiza las transacciones del marketplace mediante una comisión del **15%** sobre el importe del presupuesto en cada trabajo finalizado.
+- El 100% del importe del presupuesto aceptado por el cliente se custodia de forma segura en **Escrow** (`EscrowStatus.HELD`).
+- El dinero se libera automáticamente al profesional (`85%` neto) y a Yewi (`15%` comisión) únicamente cuando el cliente aprueba formalmente la finalización del servicio (`approveDelivery`).
+- Los profesionales no requieren suscripciones de pago mensual ni paquetes de créditos para ver solicitudes o enviar ofertas a clientes. El modelo es 100% a éxito por trabajo completado.
+
+## 7. Concisión Estricta en Textos y UI (Zero-Overflow)
+- **Títulos y Botones Ultra-Cortos**: Máximo 1 o 2 palabras (ejemplo: "Proyecto", "Obra", "Solicitud", "Buscar", "Mensajes").
+- **Prohibido Texto Verboso**: Queda terminantemente prohibido usar frases o etiquetas compuestas que desborden contenedores, botones, modales o píldoras.
+
+## 8. Homogeneidad Estricta de Iconos en Header y TabBar
+- **Iconos de Header**: Todos los iconos dentro de la cabecera de una pantalla deben tener obligatoriamente el mismo tamaño (ej. 22px). Queda prohibido mezclar tamaños heterogéneos (ej. 18px con 24px) en la misma barra superior.
+- **Iconos de TabBar**: Todos los iconos de la barra inferior deben mantener estrictamente idénticas dimensiones (22px).
+
+## 9. Preservación Inmutable de Tarjetas Oficiales (ProjectCard & ProfessionalCard)
+- Queda terminantemente prohibido sustituir, rediseñar o reemplazar el diseño de `ProjectCard` (para gigs/servicios) y `ProfessionalCard` (para profesionales/autónomos).
+- No inventar componentes de tarjeta alternativos (como `PosterCard`). Toda vista por categorías, carrusel o cuadrícula debe estructurarse reutilizando de manera estricta `ProjectCard` y `ProfessionalCard`.
+
+## 10. Cumplimiento Mandatorio de Agentes y Skills
+- Prohibido escribir o modificar código sin consultar primero el marco SSD (`AGENT_SSD.md`), `SKILL_ROUTER.md` y las skills especializadas del proyecto.
+

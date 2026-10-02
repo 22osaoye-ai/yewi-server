@@ -29,6 +29,13 @@
 - **Superficies y Adaptación de Tema**:
   - Prohibido el uso de bloques o fondos pastel chillones o saturados en tarjetas (`REQUEST_CARD_THEMES.bg`).
   - Las tarjetas deben usar estrictamente las superficies limpias del tema (`colors.surface`, `colors.border`, `isDark ? '#161922' : '#FFFFFF'`).
-  - Tipografía oficial estricta: `Satoshi-Black` para títulos e importes, `Satoshi-Bold` para etiquetas, `Satoshi-Regular` / `Satoshi-Medium` para textos y metadatos.
+  - Tipografía oficial estricta: `PlusJakartaSans-ExtraBold`, `PlusJakartaSans-Bold`, `PlusJakartaSans-SemiBold`, `PlusJakartaSans-Regular`.
   - Cero datos inventados o placeholders falsos (p. ej. "12€ créditos", tokens falsos o textos ficticios).
+
+## 7. Homogeneidad de Iconos en Header y TabBar
+- **Iconos de Header**: Todos los iconos ubicados en la cabecera (Header) de cualquier pantalla deben tener estrictamente el mismo tamaño (ej. 22px). Queda terminantemente prohibido mezclar tamaños desiguales en la misma barra superior.
+- **Iconos de TabBar**: Todos los iconos de la barra de pestañas inferior deben tener exactamente 22px.
+
+## 8. Preservación Inmutable de Tarjetas Oficiales
+- Prohibido modificar, rediseñar o reemplazar `ProjectCard` (servicios/gigs) y `ProfessionalCard` (profesionales/autónomos). No inventar tarjetas alternativas (`PosterCard`). Las agrupaciones por categoría o carruseles deben estructurarse únicamente usando `ProjectCard` y `ProfessionalCard`.
 

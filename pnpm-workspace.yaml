@@ -20,3 +20,10 @@ nodeLinker: hoisted
 
 overrides:
   deepmerge-ts: '>=8.0.0'
+  '@react-native/metro-config': '0.86.3'
+
+peerDependencyRules:
+  allowedVersions:
+    typescript: '>=5.0.0'
+    utf-8-validate: '>=5.0.2'
+    '@react-native/metro-config': '>=0.86.0'

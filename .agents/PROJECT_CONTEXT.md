@@ -67,16 +67,18 @@ yewi/
 
 ---
 
-## 5. MODELO DE NEGOCIO Y REGLAS CRÍTICAS (YEWI PRO)
+## 5. MODELO DE NEGOCIO Y REGLAS CRÍTICAS (CUSTODIA ESCROW & 15% COMISIÓN)
 
-1. **Suscripción Pro Obligatoria para Profesionales**:
-   - Los profesionales desbloquean solicitudes de clientes y envían presupuestos mediante su suscripción activa **Yewi Pro**.
-2. **Fuente de Verdad en Stripe**:
-   - El acceso Pro **únicamente** se otorga y valida tras recibir y verificar la firma de los webhooks de Stripe (`customer.subscription.created`, `customer.subscription.updated`, `invoice.payment_succeeded`) confirmando el estado `ACTIVE` o `TRIALING`.
-   - `User.isPro` y `ProfessionalProfile.isPro` son campos derivados. Ningún flag local, rol, email o parámetro enviado por el cliente otorga acceso Pro.
-   - Los eventos `payment_failed` y `customer.subscription.deleted` revocan inmediatamente el acceso Pro.
-3. **Cero Bypass**:
-   - Prohibido reintroducir créditos manuales para desbloquear leads o simular estados de suscripción con mocks.
+1. **Monetización por Comisión Transaccional (Take Rate 15%)**:
+   - Yewi monetiza reteniendo una comisión de servicio del **15%** sobre el importe total del presupuesto aceptado de cada trabajo finalizado.
+   - El **85% restante** se abona de forma íntegra y garantizada al profesional tras la aprobación del cliente.
+2. **Custodia Escrow al 100%**:
+   - Al aceptar un presupuesto, los fondos se depositan en custodia segura Escrow (`EscrowStatus.HELD`).
+   - El profesional no recibe el dinero por adelantado y el cliente tiene la certeza de que su dinero está protegido.
+   - Los fondos solo se liberan al profesional (`RELEASED_TO_PRO`) cuando el cliente da su conformidad final (`approveDelivery`). En caso de disputa, interviene administración (`OrderDispute`).
+3. **Acceso Profesional Sin Barrera de Suscripción**:
+   - Los profesionales pueden registrarse, consultar solicitudes de su zona y oficio, y enviar presupuestos sin pagar suscripciones mensuales fijas ni comprar paquetes de créditos.
+   - Cero fricción de entrada: el profesional solo paga la comisión del 15% sobre trabajos reales ganados y completados.
 
 ---
 

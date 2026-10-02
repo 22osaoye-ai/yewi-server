@@ -66,10 +66,15 @@ Cada efecto debe representar una sincronización con un sistema externo al ciclo
 
 # ESTÁNDAR VISUAL Y UI
 
-* **Tipografía**: Emplear siempre las variantes de fuente oficiales del proyecto (`Satoshi-Black`, `Satoshi-Bold`, `Satoshi-Regular`, `Satoshi-Medium`).
+* **Tipografía**: Emplear siempre las variantes de fuente geométricas oficiales del proyecto (`PlusJakartaSans-ExtraBold`, `PlusJakartaSans-Bold`, `PlusJakartaSans-SemiBold`, `PlusJakartaSans-Medium`, `PlusJakartaSans-Regular`).
 * **Temas**: Respetar `useAppTheme()` y adaptar fondos (`colors.surface`, `colors.background`), textos (`colors.textPrimary`, `colors.textSecondary`) y bordes (`colors.border`) a modo claro y oscuro.
 * **Prohibido**: Fondos pastel chillones o saturados fijos que rompan la estética premium de la app.
 * **Pantallas de Detalle**: Las vistas de detalle deben ser rutas de navegación dedicadas en Expo Router (`/request-detail`, `/detail`), nunca modales embebidos.
+* **Iconos Uniformes (Header y TabBar)**:
+  - Todos los iconos en cualquier Header deben tener estrictamente el mismo tamaño (ej. 22px). Queda prohibido mezclar tamaños desiguales en la misma barra superior.
+  - Todos los iconos de la barra inferior (TabBar) deben tener estrictamente 22px.
+* **Preservación de Tarjetas Core**:
+  - Prohibido reemplazar o rediseñar las tarjetas base del proyecto (`ProjectCard` y `ProfessionalCard`). Todo carrusel o listado debe reutilizar estas tarjetas oficiales.
 
 ---
 

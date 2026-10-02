@@ -63,6 +63,33 @@ Nueva autenticación:
 
 ---
 
+## Product Sense
+
+Activar `product-sense` cuando la tarea:
+* crea una feature nueva de producto;
+* modifica una interacción de usuario;
+* crea o modifica contenido generado por usuarios;
+* añade ratings, reviews, likes, comments, replies, follows, bookings, orders, payments o estados de negocio;
+* define nuevos modelos/entidades que representan capacidades de usuario;
+* cambia un flujo funcional existente y existe riesgo de dejar capacidades incompletas.
+
+Regla:
+* `product-sense` debe ejecutarse ANTES del diseño detallado y antes de implementar una feature nueva.
+* Para bugs puramente técnicos sin impacto funcional, no es obligatorio.
+* Para refactors internos sin cambio observable de comportamiento, no es obligatorio.
+
+Combinación:
+* Feature nueva: `product-sense` + `feature-development` + skills de stack necesarias + `testing`.
+* Feature con auth/authz: añadir `security`.
+* Feature con Prisma/modelado: añadir `prisma`.
+* Feature mobile: añadir `react-native` y `expo` cuando corresponda.
+
+Obligación:
+El agente debe distinguir OBSERVED / DOMAIN-CONVENTIONAL / BUSINESS-SPECIFIC / OPTIONAL y no puede convertir una decisión de negocio no documentada en una regla inventada.
+
+
+---
+
 ## Refactorización
 
 Activar:
@@ -181,7 +208,77 @@ Decision:
 CREATE / DO NOT CREATE
 ```
 
-Solo si la decisión es `CREATE` comenzar la implementación.
+---
+
+## Sistema de Diseño Yewi Pro (Dark Luxury & Multi-Stack Architecture)
+
+Activar `yewi-design-system` cuando la tarea implique:
+* Construir o modificar pantallas de la app móvil (herramientas Pro, presupuestos, comparador de precios, cotizaciones, métricas o dashboards)
+* Implementar componentes de interfaz respetando la división de responsabilidades (@expo/ui = primitivas nativas, NativeWind = styling, Design System = identidad, Reanimated = movimiento, Skia = gráficos, Lucide = iconografía, FlashList = listas densas)
+* Aplicar los tokens dark-first (#0B0F0F, acento turquesa #24D5C4, bordes translúcidos y radios grandes rounded-3xl)
+
+---
+
+## Diseño Visual y UI Avanzada
+
+Activar `ui-ux-pro-max`, `frontend-design`, `anti-ai-ui` y/o `theme-factory` cuando la tarea implique:
+* Diseñar interfaces con dirección estética distintiva y no genérica
+* Definir paletas de color, tipografía y jerarquía visual
+* Calidad UI/UX, heurísticas, accesibilidad y guías de interacción táctil
+* Construir componentes con personalidad de marca
+
+Complementar con:
+* `react-native` para implementación en la app móvil
+* `canvas-design` o `algorithmic-art` si se requiere generación gráfica o pósters
+
+---
+
+## Movimiento, Físicas Fluidas e Ingeniería de Diseño (Apple & Emil)
+
+Activar `apple-design`, `emil-design-eng`, `animate-expo` y/o `expo-motion` cuando la tarea implique:
+* Microinteracciones táctiles, resortes (springs) e inercia física fluida
+* Gestos continuos (drag, swipe, sheet) y retroalimentación háptica precisa
+* Transiciones espaciales interrumpibles y estados de carga no abruptos
+* Detalles invisibles de diseño UI que elevan el producto al estándar premium
+
+Complementar con:
+* `find-animation-opportunities` y `review-animations` para auditar cinemática
+* `expo-native-ui` y `building-ui` para componentes nativos oficiales
+
+---
+
+## Pruebas de Aplicaciones Web (Playwright)
+
+Activar `webapp-testing` cuando la tarea implique:
+* Escribir o ejecutar pruebas de integración o E2E con Playwright en aplicaciones web
+* Verificar funcionalidad frontend interactiva en el navegador
+* Capturar screenshots o inspeccionar logs de navegador
+
+---
+
+## Integraciones y Model Context Protocol (MCP)
+
+Activar `mcp-builder` cuando la tarea implique:
+* Crear o configurar servidores MCP (Python FastMCP o TypeScript SDK)
+* Diseñar herramientas (tools) y recursos para interacción con LLMs
+
+Activar `claude-api` cuando se interactúe directamente con APIs de Anthropic o SDKs asociados.
+
+---
+
+## Manipulación de Documentos y Reportes
+
+Activar según el formato requerido:
+* `docx`: Creación, edición y formato de documentos Word (.docx, .dotx)
+* `pdf`: Extracción, combinación, OCR, rotación o generación de PDFs
+* `pptx`: Creación y edición de presentaciones de diapositivas (.pptx, .potx)
+* `xlsx`: Creación, limpieza de datos, fórmulas y manipulación de hojas de cálculo (.xlsx, .csv, .tsv)
+* `doc-coauthoring`: Estructuración y co-autoría de documentación técnica, propuestas o especificaciones
+* `payments-launch-readiness`: Auditoría de pagos, checkout, pasarelas, webhooks, suscripciones, PCI DSS, SCA y checklist de lanzamiento (Go/No-Go)
+* `ui-design-guardian`: Guardián del sistema de diseño, prevención de UI inventada/alucinada, reutilización estricta de componentes existentes y heurísticas de usabilidad (Nielsen/accesibilidad)
+* `software-architect-reviewer`: Auditoría de arquitectura y seguridad, detección de alucinaciones/mocks inventados, mantenibilidad y checklist production-ready
+* `product-sense`: Juicio de producto y completitud funcional, prevención de interpretaciones literales incompletas, análisis de ciclo de vida, actores e invariantes
+
 
 ---
 
