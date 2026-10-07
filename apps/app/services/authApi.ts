@@ -172,7 +172,6 @@ export const authApi = {
       method: 'POST',
       body: JSON.stringify({
         idToken: dto.idToken,
-        email: dto.email,
         name: dto.name,
         avatarUrl: dto.avatarUrl,
       }),

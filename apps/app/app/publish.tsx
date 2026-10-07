@@ -291,18 +291,9 @@ export default function PublishScreen() {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
       let currentToken = await getAccessToken();
-      if (!currentToken && user?.email) {
-        try {
-          const authRes = await authService.loginWithGoogle({
-            email: user.email,
-            name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || (user as any).displayName || 'Profesional',
-            avatarUrl: user.avatarUrl || undefined,
-          });
-          if (authRes?.accessToken) {
-            await setAccessToken(authRes.accessToken);
-            currentToken = authRes.accessToken;
-          }
-        } catch {}
+      if (!currentToken) {
+        toast.error('Sesión requerida', 'Debes iniciar sesión para publicar un servicio.');
+        return;
       }
 
       const standardPrice = parseFloat(packages.STANDARD.price) || 300;
