@@ -43,7 +43,7 @@ import { StatusesModule } from './modules/statuses/statuses.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => [
         {
-          ttl: configService.get<number>('throttle.ttl') ?? 60,
+          ttl: (configService.get<number>('throttle.ttl') ?? 60) * 1000,
           limit: configService.get<number>('throttle.limit') ?? 100,
         },
       ],

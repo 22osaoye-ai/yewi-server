@@ -162,6 +162,7 @@ export class StatusesService {
         reactions: true,
       },
       orderBy: { createdAt: 'asc' },
+      take: 100,
     });
 
     const groupsMap = new Map<string, AuthorStatusFeedGroup>();

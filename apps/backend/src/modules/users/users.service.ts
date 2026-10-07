@@ -1,4 +1,10 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { OrderStatus } from '@prisma/client';
 import { v2 as cloudinary } from 'cloudinary';
 import { PrismaService } from '../../database/prisma.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -118,24 +124,91 @@ export class UsersService {
   async deleteAccount(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { profile: true },
+      include: { profile: true, professionalProfile: true },
     });
 
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
     }
 
+    // 1. Validar que no tenga pedidos activos en curso o disputas
+    const pendingOrdersCount = await this.prisma.order.count({
+      where: {
+        OR: [
+          { clientId: userId },
+          { professionalProfile: { userId } },
+        ],
+        status: {
+          in: [
+            OrderStatus.PENDING_REQUIREMENTS,
+            OrderStatus.IN_PROGRESS,
+            OrderStatus.IN_DELIVERY,
+            OrderStatus.DISPUTED,
+          ],
+        },
+      },
+    });
+
+    if (pendingOrdersCount > 0) {
+      throw new BadRequestException(
+        'No puedes eliminar tu cuenta mientras tengas pedidos activos o disputas en curso.',
+      );
+    }
+
+    // 2. Validar que no tenga saldo pendiente o disponible en su billetera
+    const wallet = await this.prisma.wallet.findUnique({
+      where: { userId },
+    });
+    if (
+      wallet &&
+      (Number(wallet.fiatAvailableBalance) > 0 ||
+        Number(wallet.fiatPendingBalance) > 0)
+    ) {
+      throw new BadRequestException(
+        'No puedes eliminar tu cuenta con saldo pendiente o disponible en tu billetera. Solicita un retiro antes de continuar.',
+      );
+    }
+
     const timestamp = Date.now();
     const anonymizedEmail = `deleted_${userId.slice(0, 8)}_${timestamp}@anonymized.yewi.es`;
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.profile.deleteMany({
-        where: { userId },
-      });
+      // Anonymizar perfil personal (GDPR/LOPD)
+      if (user.profile) {
+        await tx.profile.update({
+          where: { userId },
+          data: {
+            firstName: 'Usuario',
+            lastName: 'Eliminado',
+            displayName: 'Usuario Eliminado',
+            avatarUrl: null,
+            phoneNumber: null,
+            phoneVerified: false,
+            address: null,
+            city: null,
+            postalCode: null,
+            region: null,
+            province: null,
+            bio: null,
+          },
+        });
+      }
 
-      await tx.professionalProfile.deleteMany({
-        where: { userId },
-      });
+      // Anonymizar perfil profesional si existe para no romper FK de órdenes pasadas
+      if (user.professionalProfile) {
+        await tx.professionalProfile.update({
+          where: { userId },
+          data: {
+            businessName: 'Profesional Inactivo',
+            taxId: null,
+            bio: 'Cuenta profesional eliminada por el usuario.',
+            isPro: false,
+            hourlyRate: null,
+            latitude: null,
+            longitude: null,
+          },
+        });
+      }
 
       await tx.user.update({
         where: { id: userId },

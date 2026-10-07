@@ -5,6 +5,8 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { randomBytes } from 'crypto';
 import {
   EscrowStatus,
   NotificationType,
@@ -31,6 +33,7 @@ export class OrdersService {
     private readonly prisma: PrismaService,
     private readonly paymentsService: PaymentsService,
     @Optional() private readonly realtime?: RealtimeService,
+    @Optional() private readonly configService?: ConfigService,
   ) {}
 
   /**
@@ -122,7 +125,9 @@ export class OrdersService {
       1,
       Math.round((subtotal - discountAmount) * 100) / 100,
     );
-    const platformCommissionPercent = 15;
+    const platformCommissionPercent = Number(
+      this.configService?.get('PLATFORM_COMMISSION_PERCENTAGE') ?? 15,
+    );
     const platformFee =
       Math.round(finalAmount * (platformCommissionPercent / 100) * 100) / 100;
     const proEarnings = Math.round((finalAmount - platformFee) * 100) / 100;
@@ -156,19 +161,28 @@ export class OrdersService {
       );
     }
 
-    const orderNumber = `ORD-GIG-${Date.now().toString().slice(-6)}`;
+    const orderNumber = `ORD-GIG-${Date.now()}-${randomBytes(3).toString('hex').toUpperCase()}`;
     const hasRequirements =
       !!dto.requirementsAnswers &&
       Object.keys(dto.requirementsAnswers).length > 0;
 
     const result = await this.prisma.$transaction(async (tx) => {
-      // 1. Debitar fondos reales de la billetera del cliente hacia Escrow
-      await tx.wallet.update({
-        where: { id: clientWallet.id },
+      // 1. Debitar fondos reales de la billetera del cliente hacia Escrow de forma atómica para prevenir condiciones de carrera
+      const debitResult = await tx.wallet.updateMany({
+        where: {
+          id: clientWallet.id,
+          fiatAvailableBalance: { gte: totalAmount },
+        },
         data: {
           fiatAvailableBalance: { decrement: totalAmount },
         },
       });
+
+      if (debitResult.count === 0) {
+        throw new BadRequestException(
+          'Saldo insuficiente o transacción concurrente detectada en tu billetera.',
+        );
+      }
 
       // 2. Registrar transacción en el libro mayor
       await tx.ledgerTransaction.create({
@@ -453,7 +467,9 @@ export class OrdersService {
       session.amount_total !== undefined && session.amount_total !== null
         ? session.amount_total / 100
         : subtotal;
-    const platformCommissionPercent = 15;
+    const platformCommissionPercent = Number(
+      this.configService?.get('PLATFORM_COMMISSION_PERCENTAGE') ?? 15,
+    );
     const platformFee =
       Math.round(totalAmount * (platformCommissionPercent / 100) * 100) / 100;
     const proEarnings = Math.round((totalAmount - platformFee) * 100) / 100;
@@ -478,7 +494,7 @@ export class OrdersService {
       });
     }
 
-    const orderNumber = `ORD-GIG-${Date.now().toString().slice(-6)}`;
+    const orderNumber = `ORD-GIG-${Date.now()}-${randomBytes(3).toString('hex').toUpperCase()}`;
     const hasRequirements =
       !!requirementsAnswers && Object.keys(requirementsAnswers).length > 0;
 

@@ -40,9 +40,28 @@ async function bootstrap() {
   // 2. Compresión de respuestas
   app.use(compression());
 
-  // 3. CORS
+  // 3. CORS seguro
+  const nodeEnv =
+    configService.get<string>('nodeEnv') ||
+    process.env.NODE_ENV ||
+    'development';
+  const isProduction = nodeEnv === 'production';
+  const configuredCors = configService.get<string | string[]>('cors.origin');
+  const allowedOrigins =
+    configuredCors && configuredCors !== '*'
+      ? configuredCors
+      : isProduction
+        ? [
+            process.env.PUBLIC_APP_URL,
+            process.env.RENDER_EXTERNAL_URL,
+            'https://yewi.es',
+            'https://www.yewi.es',
+            'https://app.yewi.es',
+          ].filter(Boolean) as string[]
+        : '*';
+
   app.enableCors({
-    origin: configService.get<string[]>('cors.origin') ?? '*',
+    origin: allowedOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
   });
@@ -139,13 +158,18 @@ async function bootstrap() {
     )
     .build();
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-    },
-    customSiteTitle: 'Yewi API Documentation',
-  });
+  const enableSwagger =
+    process.env.ENABLE_SWAGGER === 'true' || !isProduction;
+
+  if (enableSwagger) {
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+      },
+      customSiteTitle: 'Yewi API Documentation',
+    });
+  }
 
   await app.listen(port, '0.0.0.0');
   const appUrl =
@@ -159,9 +183,15 @@ async function bootstrap() {
   logger.log(
     `🚀 Servidor Yewi iniciado exitosamente en: ${appUrl}/${apiPrefix}`,
   );
-  logger.log(
-    `📚 Documentación Swagger interactiva: ${appUrl}/api/docs`,
-  );
+  if (enableSwagger) {
+    logger.log(
+      `📚 Documentación Swagger interactiva: ${appUrl}/api/docs`,
+    );
+  } else {
+    logger.log(
+      `🔒 Swagger deshabilitado en entorno de producción por seguridad.`,
+    );
+  }
   logger.log(
     `================================================================`,
   );

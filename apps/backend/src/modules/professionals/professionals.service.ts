@@ -513,6 +513,7 @@ export class ProfessionalsService {
           select: { id: true, name: true, slug: true, icon: true },
         },
       },
+      take: 100,
     });
 
     // Filtrar por radio de servicio del profesional o cercanía

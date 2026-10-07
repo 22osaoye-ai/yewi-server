@@ -196,13 +196,29 @@ export class WalletService {
 
     // Ejecutar acreditación atómica
     return this.prisma.$transaction(async (tx) => {
-      // 1. Marcar transacción como COMPLETADA
-      await tx.ledgerTransaction.update({
-        where: { id: pendingTx.id },
+      // 1. Transición atómica de PENDING a COMPLETED con updateMany
+      const updateResult = await tx.ledgerTransaction.updateMany({
+        where: {
+          id: pendingTx.id,
+          status: TransactionStatus.PENDING,
+        },
         data: {
           status: TransactionStatus.COMPLETED,
         },
       });
+
+      if (updateResult.count !== 1) {
+        // Ya fue procesado concurrentemente
+        const currentWallet = await tx.wallet.findUnique({
+          where: { id: wallet.id },
+        });
+        return {
+          success: true,
+          message: 'El pago ya ha sido procesado anteriormente.',
+          purchasedCredits: creditAmount,
+          newCreditBalance: currentWallet?.creditBalance ?? wallet.creditBalance,
+        };
+      }
 
       // 2. Incrementar balance de créditos
       const updatedWallet = await tx.wallet.update({
@@ -233,7 +249,7 @@ export class WalletService {
   }
 
   /**
-   * Solicitud de retiro de saldo fiat ganado por un profesional
+   * Solicitud de retiro de saldo fiat ganado por un profesional (Protegido contra carreras de saldo)
    */
   async requestPayout(userId: string, dto: RequestPayoutDto) {
     const wallet = await this.getMyWallet(userId);
@@ -246,13 +262,27 @@ export class WalletService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // Descontar saldo disponible
-      const updated = await tx.wallet.update({
-        where: { id: wallet.id },
+      // Descontar saldo disponible de forma atómica garantizando saldo suficiente (previene saldo negativo por concurrencia)
+      const updateResult = await tx.wallet.updateMany({
+        where: {
+          id: wallet.id,
+          fiatAvailableBalance: { gte: dto.amount },
+        },
         data: {
           fiatAvailableBalance: { decrement: dto.amount },
         },
       });
+
+      if (updateResult.count !== 1) {
+        throw new BadRequestException(
+          'Saldo disponible insuficiente para retirar o solicitud simultánea en curso.',
+        );
+      }
+
+      const updated =
+        (await tx.wallet.findUnique({
+          where: { id: wallet.id },
+        })) ?? wallet;
 
       // Registrar movimiento de retiro
       const txRecord = await tx.ledgerTransaction.create({

@@ -38,12 +38,18 @@ export class RealtimeGateway
       return;
     }
 
+    const jwtSecret = this.configService.get<string>('JWT_SECRET');
+    if (!jwtSecret) {
+      this.logger.error('JWT_SECRET no configurado en RealtimeGateway');
+      client.disconnect();
+      return;
+    }
+
     try {
       const payload = await this.jwtService.verifyAsync<{ sub: string }>(
         token,
         {
-          secret:
-            this.configService.get<string>('JWT_SECRET') ?? 'fallback_secret',
+          secret: jwtSecret,
         },
       );
       if (!payload.sub) {

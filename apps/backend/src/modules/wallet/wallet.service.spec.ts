@@ -1,3 +1,4 @@
+
 import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { TransactionStatus, TransactionType } from '@prisma/client';
@@ -14,6 +15,7 @@ describe('WalletService payment flow', () => {
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     ledgerTransaction: {
       findFirst: jest.fn(),
@@ -102,7 +104,7 @@ describe('WalletService payment flow', () => {
       }),
     ).rejects.toThrow(BadRequestException);
 
-    expect(mockPrisma.wallet.update).not.toHaveBeenCalled();
+    expect(mockPrisma.wallet.updateMany).not.toHaveBeenCalled();
   });
 
   it('records pending payout and deducts available balance when funds are sufficient', async () => {
@@ -110,10 +112,7 @@ describe('WalletService payment flow', () => {
       id: 'wallet_1',
       fiatAvailableBalance: 250.0,
     });
-    mockPrisma.wallet.update.mockResolvedValue({
-      id: 'wallet_1',
-      fiatAvailableBalance: 150.0,
-    });
+    mockPrisma.wallet.updateMany.mockResolvedValue({ count: 1 });
     mockPrisma.ledgerTransaction.create.mockResolvedValue({ id: 'payout_tx_1' });
 
     const result = await service.requestPayout('user_1', {
@@ -122,9 +121,9 @@ describe('WalletService payment flow', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(mockPrisma.wallet.update).toHaveBeenCalledWith(
+    expect(mockPrisma.wallet.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'wallet_1' },
+        where: { id: 'wallet_1', fiatAvailableBalance: { gte: 100.0 } },
         data: { fiatAvailableBalance: { decrement: 100.0 } },
       }),
     );
@@ -138,5 +137,20 @@ describe('WalletService payment flow', () => {
         }),
       }),
     );
+  });
+
+  it('rejects payout with BadRequestException if concurrent debit causes count to be 0', async () => {
+    mockPrisma.wallet.findUnique.mockResolvedValue({
+      id: 'wallet_1',
+      fiatAvailableBalance: 250.0,
+    });
+    mockPrisma.wallet.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      service.requestPayout('user_1', {
+        amount: 100.0,
+        destinationAccount: 'ES9121000418450200051332',
+      }),
+    ).rejects.toThrow(BadRequestException);
   });
 });

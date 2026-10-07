@@ -15,6 +15,7 @@ describe('OrdersService - Escrow, Payouts & Refunds', () => {
     wallet: {
       findUnique: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       create: jest.fn(),
     },
     promotion: {
@@ -282,7 +283,7 @@ describe('OrdersService - Escrow, Payouts & Refunds', () => {
         fiatAvailableBalance: 200.0,
       });
 
-      mockPrisma.wallet.update.mockResolvedValue({ id: 'wallet-client-1', fiatAvailableBalance: 100.0 });
+      mockPrisma.wallet.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.ledgerTransaction.create.mockResolvedValue({ id: 'ledger-1' });
       mockPrisma.order.create.mockResolvedValue({
         id: 'order-1',
@@ -298,9 +299,9 @@ describe('OrdersService - Escrow, Payouts & Refunds', () => {
       const result = await service.createGigOrder('client-user-1', { gigPackageId: 'pkg-1' });
 
       expect(result.id).toBe('order-1');
-      expect(mockPrisma.wallet.update).toHaveBeenCalledWith(
+      expect(mockPrisma.wallet.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'wallet-client-1' },
+          where: { id: 'wallet-client-1', fiatAvailableBalance: { gte: 100 } },
           data: { fiatAvailableBalance: { decrement: 100 } },
         }),
       );
@@ -322,6 +323,36 @@ describe('OrdersService - Escrow, Payouts & Refunds', () => {
           }),
         }),
       );
+    });
+
+    it('rejects order with BadRequestException if concurrent transaction debited wallet balance', async () => {
+      mockPrisma.gigPackage.findUnique.mockResolvedValue({
+        id: 'pkg-1',
+        price: 100,
+        deliveryDays: 3,
+        gigId: 'gig-1',
+        gig: {
+          title: 'Electricidad Rápida',
+          professionalProfileId: 'pro-profile-1',
+          professionalProfile: {
+            userId: 'pro-user-1',
+            user: { id: 'pro-user-1' },
+          },
+        },
+      });
+
+      mockPrisma.wallet.findUnique.mockResolvedValue({
+        id: 'wallet-client-1',
+        userId: 'client-user-1',
+        fiatAvailableBalance: 200.0,
+      });
+
+      // Simulates concurrent debit occurring right between check and update
+      mockPrisma.wallet.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.createGigOrder('client-user-1', { gigPackageId: 'pkg-1' }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

@@ -19,6 +19,8 @@ import {
   TransactionType,
   UserRole,
 } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
+import { randomBytes } from 'crypto';
 import { GeoUtils } from '../../common/utils/geo.utils';
 import { PrismaService } from '../../database/prisma.service';
 import { CreateQuoteProposalDto } from './dto/create-quote-proposal.dto';
@@ -31,6 +33,7 @@ export class LeadsService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly realtime?: RealtimeService,
+    @Optional() private readonly configService?: ConfigService,
   ) {}
 
   /**
@@ -894,7 +897,9 @@ export class LeadsService {
     }
 
     const price = Number(proposal.price);
-    const platformCommissionPercent = 15;
+    const platformCommissionPercent = Number(
+      this.configService?.get('PLATFORM_COMMISSION_PERCENTAGE') ?? 15,
+    );
     const platformFee =
       Math.round(price * (platformCommissionPercent / 100) * 100) / 100;
     const proEarnings = Math.round((price - platformFee) * 100) / 100;
@@ -905,7 +910,7 @@ export class LeadsService {
       deliveryDeadline.getDate() + proposal.estimatedDays,
     );
 
-    const orderNumber = `ORD-LEAD-${Date.now().toString().slice(-6)}`;
+    const orderNumber = `ORD-LEAD-${Date.now()}-${randomBytes(3).toString('hex').toUpperCase()}`;
 
     const clientWallet = await this.prisma.wallet.findUnique({
       where: { userId },
@@ -923,13 +928,22 @@ export class LeadsService {
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
-      // Debitar fondos del cliente hacia Escrow
-      await tx.wallet.update({
-        where: { id: clientWallet.id },
+      // Debitar fondos del cliente hacia Escrow de forma atómica para prevenir condiciones de carrera
+      const debitResult = await tx.wallet.updateMany({
+        where: {
+          id: clientWallet.id,
+          fiatAvailableBalance: { gte: totalAmount },
+        },
         data: {
           fiatAvailableBalance: { decrement: totalAmount },
         },
       });
+
+      if (debitResult.count === 0) {
+        throw new BadRequestException(
+          'Saldo insuficiente o transacción concurrente detectada en tu billetera.',
+        );
+      }
 
       // Registrar movimiento de retención en Escrow
       await tx.ledgerTransaction.create({

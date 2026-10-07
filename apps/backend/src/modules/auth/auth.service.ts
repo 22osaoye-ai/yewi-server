@@ -29,6 +29,7 @@ import { JwtPayload } from './strategies/jwt.strategy';
 interface StoredOtp {
   code: string;
   expiresAt: number;
+  attempts?: number;
 }
 
 @Injectable()
@@ -152,7 +153,7 @@ export class AuthService {
             email: dto.email.toLowerCase(),
             passwordHash,
             roles,
-            isEmailVerified: true,
+            isEmailVerified: false,
           },
         });
 
@@ -691,8 +692,9 @@ export class AuthService {
     const expiresAt = Date.now() + 5 * 60 * 1000; // 5 minutos de validez
 
     // Guardar en Redis si está activo, o en memoria con purga de expirados
+    const otpData: StoredOtp = { code, expiresAt, attempts: 0 };
     if (this.redisCache) {
-      await this.redisCache.set(`otp:${cleanPhone}`, { code, expiresAt }, 300);
+      await this.redisCache.set(`otp:${cleanPhone}`, otpData, 300);
     } else {
       const now = Date.now();
       for (const [key, val] of this.otpStore.entries()) {
@@ -700,7 +702,7 @@ export class AuthService {
           this.otpStore.delete(key);
         }
       }
-      this.otpStore.set(cleanPhone, { code, expiresAt });
+      this.otpStore.set(cleanPhone, otpData);
     }
 
     this.logger.log(`SMS OTP enviado a ${cleanPhone}`);
@@ -726,12 +728,36 @@ export class AuthService {
       stored = this.otpStore.get(cleanPhone) ?? null;
     }
 
-    const isValidCode =
-      stored && stored.code === dto.code && stored.expiresAt > Date.now();
-
-    if (!isValidCode) {
+    if (!stored || stored.expiresAt <= Date.now()) {
       throw new UnauthorizedException(
         'El código SMS es incorrecto o ha expirado',
+      );
+    }
+
+    stored.attempts = (stored.attempts ?? 0) + 1;
+
+    if (stored.attempts > 5) {
+      if (this.redisCache) {
+        await this.redisCache.del(`otp:${cleanPhone}`);
+      }
+      this.otpStore.delete(cleanPhone);
+      throw new UnauthorizedException(
+        'Demasiados intentos fallidos. El código de verificación ha sido bloqueado.',
+      );
+    }
+
+    if (stored.code !== dto.code) {
+      if (this.redisCache) {
+        const remainingTtl = Math.max(
+          1,
+          Math.floor((stored.expiresAt - Date.now()) / 1000),
+        );
+        await this.redisCache.set(`otp:${cleanPhone}`, stored, remainingTtl);
+      } else {
+        this.otpStore.set(cleanPhone, stored);
+      }
+      throw new UnauthorizedException(
+        `El código SMS es incorrecto. Intentos restantes: ${5 - stored.attempts}`,
       );
     }
 

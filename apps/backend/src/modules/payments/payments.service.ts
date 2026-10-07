@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  InternalServerErrorException,
   Logger,
   ServiceUnavailableException,
   Optional,
@@ -12,12 +13,14 @@ import Stripe from 'stripe';
 import { PrismaService } from '../../database/prisma.service';
 import { CreatePaymentIntentDto } from './dto/create-payment-intent.dto';
 import { RealtimeService } from '../../common/realtime/realtime.service';
+import { RedisCacheService } from '../../common/cache/redis.service';
 import { OrdersService } from '../orders/orders.service';
 
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
   private stripe: Stripe | null = null;
+  private readonly processedEventIds = new Set<string>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -26,6 +29,7 @@ export class PaymentsService {
     @Optional()
     @Inject(forwardRef(() => OrdersService))
     private readonly ordersService?: OrdersService,
+    @Optional() private readonly redisCache?: RedisCacheService,
   ) {
     const apiKey = this.configService.get<string>('STRIPE_SECRET_KEY');
     if (apiKey && !apiKey.includes('placeholder')) {
@@ -738,6 +742,26 @@ export class PaymentsService {
 
       this.logger.log(`Evento recibido de Stripe: ${event.type}`);
 
+      // 1. Control de Idempotencia estricto por event.id
+      if (this.processedEventIds.has(event.id)) {
+        this.logger.log(
+          `Evento de Stripe duplicado ignorado (idempotencia en memoria): ${event.id}`,
+        );
+        return { received: true, duplicate: true };
+      }
+
+      if (this.redisCache) {
+        const alreadyProcessed = await this.redisCache.get(
+          `stripe:event:${event.id}`,
+        );
+        if (alreadyProcessed) {
+          this.logger.log(
+            `Evento de Stripe duplicado ignorado (idempotencia en Redis): ${event.id}`,
+          );
+          return { received: true, duplicate: true };
+        }
+      }
+
       switch (event.type) {
         case 'checkout.session.completed': {
           const session = event.data.object as any;
@@ -748,26 +772,23 @@ export class PaymentsService {
             this.logger.log(
               `Stripe Checkout completado para Gig Order (Session: ${session.id}, User: ${userId}). Materializando orden en Escrow...`,
             );
-            if (this.ordersService && userId) {
-              try {
-                await this.ordersService.confirmGigCheckoutSession(
-                  userId,
-                  session.id,
-                );
-                this.logger.log(
-                  `Orden y fondos retenidos en Escrow materializados exitosamente desde webhook para sesión: ${session.id}`,
-                );
-              } catch (confirmErr: any) {
-                this.logger.error(
-                  `Error al materializar orden desde webhook (Session: ${session.id}): ${confirmErr.message}`,
-                  confirmErr.stack,
-                );
-              }
-            } else {
-              this.logger.warn(
+            if (!this.ordersService || !userId) {
+              this.logger.error(
                 `OrdersService o userId no disponible para materializar la orden (Session: ${session.id}, userId: ${userId})`,
               );
+              throw new InternalServerErrorException(
+                `Servicio de órdenes o userId no disponible para procesar sesión: ${session.id}`,
+              );
             }
+
+            // Propagar error (responder 500) para que Stripe reintente si la base de datos o el servicio fallan
+            await this.ordersService.confirmGigCheckoutSession(
+              userId,
+              session.id,
+            );
+            this.logger.log(
+              `Orden y fondos retenidos en Escrow materializados exitosamente desde webhook para sesión: ${session.id}`,
+            );
           } else if (userId && session.subscription) {
             const subscriptionId =
               typeof session.subscription === 'string'
@@ -1035,12 +1056,33 @@ export class PaymentsService {
           );
       }
 
+      // 2. Registrar evento como exitoso en cache de idempotencia
+      this.processedEventIds.add(event.id);
+      if (this.processedEventIds.size > 10000) {
+        const first = this.processedEventIds.values().next().value;
+        if (first) this.processedEventIds.delete(first);
+      }
+
+      if (this.redisCache) {
+        await this.redisCache.set(`stripe:event:${event.id}`, '1', 86400 * 7);
+      }
+
       return { received: true };
     } catch (err: unknown) {
+      if (
+        err instanceof BadRequestException ||
+        err instanceof ServiceUnavailableException
+      ) {
+        throw err;
+      }
       const message =
         err instanceof Error ? err.message : 'Error procesando webhook';
-      this.logger.error(`Error en Webhook de Stripe: ${message}`);
-      throw new BadRequestException(`Webhook Error: ${message}`);
+      this.logger.error(
+        `Error en Webhook de Stripe: ${message}`,
+        err instanceof Error ? err.stack : undefined,
+      );
+      // Responder con 500 para que Stripe reintente automáticamente
+      throw new InternalServerErrorException(`Webhook Processing Error: ${message}`);
     }
   }
 }

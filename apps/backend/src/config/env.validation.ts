@@ -32,7 +32,19 @@ export const envValidationSchema = Joi.object({
 
   STRIPE_SECRET_KEY: Joi.string().allow('').optional(),
   STRIPE_WEBHOOK_SECRET: Joi.string().allow('').optional(),
+  STRIPE_PRO_PRICE_ID: Joi.string().allow('').optional(),
 
-  STORAGE_DRIVER: Joi.string().valid('local', 's3').default('local'),
+  STORAGE_DRIVER: Joi.string().valid('local', 's3', 'cloudinary').default('local'),
   STORAGE_LOCAL_PATH: Joi.string().default('./uploads'),
+
+  CLOUDINARY_CLOUD_NAME: Joi.string().allow('').optional(),
+  CLOUDINARY_NAME: Joi.string().allow('').optional(),
+  CLOUDINARY_API_KEY: Joi.string().allow('').optional(),
+  CLOUDINARY_API_SECRET: Joi.string().allow('').optional(),
+
+  GOOGLE_CLIENT_ID: Joi.string().allow('').optional(),
+  GOOGLE_CLIENT_SECRET: Joi.string().allow('').optional(),
+  GOOGLE_REDIRECT_URI: Joi.string().allow('').optional(),
+  GOOGLE_CLIENT_IDS: Joi.string().allow('').optional(),
+  CLERK_JWKS_URL: Joi.string().allow('').optional(),
 });
