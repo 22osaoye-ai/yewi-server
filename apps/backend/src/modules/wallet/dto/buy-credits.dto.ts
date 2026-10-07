@@ -62,4 +62,15 @@ export class RequestPayoutDto {
   destinationAccount: string;
 }
 
+export class TopupWalletDto {
+  @ApiProperty({
+    example: 50.0,
+    description: 'Monto en euros a recargar en la billetera (mínimo 5 €)',
+  })
+  @IsNumber()
+  @IsPositive()
+  @Min(5, { message: 'El importe mínimo de recarga es de 5 €' })
+  amount: number;
+}
+
 

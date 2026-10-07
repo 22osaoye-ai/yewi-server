@@ -21,7 +21,9 @@ describe('WalletService payment flow', () => {
       findFirst: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
+
     $transaction: jest.fn((callback: (tx: any) => unknown) =>
       callback(mockPrisma),
     ),
@@ -153,4 +155,99 @@ describe('WalletService payment flow', () => {
       }),
     ).rejects.toThrow(BadRequestException);
   });
+
+  it('credits fiat balance once and prevents duplicate crediting on repeated webhook delivery', async () => {
+    mockPrisma.wallet.findUnique.mockResolvedValue({
+      id: 'wallet_1',
+      fiatAvailableBalance: 50.0,
+      creditBalance: 0,
+      transactions: [],
+    });
+    mockPrisma.ledgerTransaction.findFirst
+      .mockResolvedValueOnce(null) // Primera entrega: no existe previa completada
+      .mockResolvedValueOnce(null) // No existe previa pendiente
+      .mockResolvedValueOnce({
+        id: 'tx_completed_1',
+        status: TransactionStatus.COMPLETED,
+      }); // Segunda entrega: ya existe completada
+    mockPrisma.ledgerTransaction.create.mockResolvedValue({ id: 'tx_new_1' });
+    mockPrisma.wallet.update.mockResolvedValue({
+      id: 'wallet_1',
+      fiatAvailableBalance: 100.0,
+    });
+
+    // 1. Primera entrega del webhook
+    const firstDelivery = await service.creditFiatDeposit({
+      userId: 'user_1',
+      amount: 50.0,
+      paymentIntentId: 'pi_test_123',
+    });
+
+    expect(firstDelivery.success).toBe(true);
+    expect(firstDelivery.transactionId).toBe('tx_new_1');
+    expect(mockPrisma.wallet.update).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.wallet.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'wallet_1' },
+        data: { fiatAvailableBalance: { increment: 50.0 } },
+      }),
+    );
+
+    // 2. Segunda entrega duplicada del webhook del mismo payment_intent
+    const duplicateDelivery = await service.creditFiatDeposit({
+      userId: 'user_1',
+      amount: 50.0,
+      paymentIntentId: 'pi_test_123',
+    });
+
+    expect(duplicateDelivery.success).toBe(true);
+    expect(duplicateDelivery.alreadyProcessed).toBe(true);
+    // Verificar que NO se incrementó el saldo por segunda vez
+    expect(mockPrisma.wallet.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles concurrent webhook deliveries of the same pending deposit atomically', async () => {
+    mockPrisma.wallet.findUnique.mockResolvedValue({
+      id: 'wallet_1',
+      fiatAvailableBalance: 10.0,
+      creditBalance: 0,
+      transactions: [],
+    });
+    // Ambas llamadas encuentran la transacción en estado PENDING
+    mockPrisma.ledgerTransaction.findFirst
+      .mockResolvedValueOnce(null) // No completed
+      .mockResolvedValueOnce({ id: 'pending_tx_1', status: TransactionStatus.PENDING })
+      .mockResolvedValueOnce(null) // No completed
+      .mockResolvedValueOnce({ id: 'pending_tx_1', status: TransactionStatus.PENDING });
+
+    // La primera llamada actualiza PENDING -> COMPLETED exitosamente (count: 1)
+    mockPrisma.ledgerTransaction.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      // La segunda llamada concurrente detecta que ya no está PENDING (count: 0)
+      .mockResolvedValueOnce({ count: 0 });
+
+    mockPrisma.wallet.update.mockResolvedValue({
+      id: 'wallet_1',
+      fiatAvailableBalance: 30.0,
+    });
+
+    const [res1, res2] = await Promise.all([
+      service.creditFiatDeposit({
+        userId: 'user_1',
+        amount: 20.0,
+        paymentIntentId: 'pi_concurrent_999',
+      }),
+      service.creditFiatDeposit({
+        userId: 'user_1',
+        amount: 20.0,
+        paymentIntentId: 'pi_concurrent_999',
+      }),
+    ]);
+
+    expect(res1.success).toBe(true);
+    expect(res2.success).toBe(true);
+    // Exactamente una acreditación de saldo ejecutada
+    expect(mockPrisma.wallet.update).toHaveBeenCalledTimes(1);
+  });
 });
+

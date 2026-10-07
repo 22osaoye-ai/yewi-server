@@ -325,13 +325,22 @@ export class AuthService {
         return null;
       }
 
-      // 3. Validar audiencia (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_IDS) si está configurada
+      // 3. Validar audiencia (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_IDS)
       const googleClientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
       const googleClientIds = this.configService.get<string>('GOOGLE_CLIENT_IDS');
       const allowedAudiences = [
         googleClientId,
         ...(googleClientIds ? googleClientIds.split(',').map((id) => id.trim()) : []),
       ].filter(Boolean) as string[];
+
+      const isProduction =
+        this.configService.get<string>('NODE_ENV') === 'production';
+      if (isProduction && allowedAudiences.length === 0) {
+        this.logger.error(
+          'GOOGLE_CLIENT_ID es obligatorio en entorno de producción para validar audiencia',
+        );
+        return null;
+      }
 
       if (allowedAudiences.length > 0) {
         if (!tokenInfo.aud || !allowedAudiences.includes(tokenInfo.aud)) {
@@ -372,8 +381,19 @@ export class AuthService {
       }
 
       const kid = decodedComplete.header.kid;
+      const isProduction =
+        this.configService.get<string>('NODE_ENV') === 'production';
+      const configuredJwksUrl = this.configService.get<string>('CLERK_JWKS_URL');
+
+      if (isProduction && !configuredJwksUrl) {
+        this.logger.error(
+          'CLERK_JWKS_URL es obligatorio en producción para validar tokens de Clerk',
+        );
+        return null;
+      }
+
       const jwksUrl =
-        this.configService.get<string>('CLERK_JWKS_URL') ||
+        configuredJwksUrl ||
         'https://certain-sailfish-4270.clerk.accounts.dev/.well-known/jwks.json';
 
       // Reutilizar cache por 1 hora
@@ -401,6 +421,8 @@ export class AuthService {
         algorithms: ['RS256'],
       }) as {
         sub?: string;
+        iss?: string;
+        azp?: string;
         email?: string;
         email_address?: string;
         name?: string;
@@ -410,6 +432,39 @@ export class AuthService {
       if (!verifiedPayload) {
         return null;
       }
+
+      // Validar iss (issuer) de Clerk
+      const configuredIssuer = this.configService.get<string>('CLERK_ISSUER');
+      if (configuredIssuer && verifiedPayload.iss !== configuredIssuer) {
+        this.logger.warn(
+          `Clerk token: iss (${verifiedPayload.iss}) no coincide con CLERK_ISSUER (${configuredIssuer})`,
+        );
+        return null;
+      } else if (
+        verifiedPayload.iss &&
+        !verifiedPayload.iss.includes('clerk') &&
+        !verifiedPayload.iss.includes('accounts.dev')
+      ) {
+        this.logger.warn(
+          `Clerk token: emisor no reconocido (${verifiedPayload.iss})`,
+        );
+        return null;
+      }
+
+      // Validar azp (Authorized Party) de Clerk
+      const configuredAzp =
+        this.configService.get<string>('CLERK_AUTHORIZED_PARTY');
+      if (
+        configuredAzp &&
+        verifiedPayload.azp &&
+        verifiedPayload.azp !== configuredAzp
+      ) {
+        this.logger.warn(
+          `Clerk token: azp (${verifiedPayload.azp}) no coincide con CLERK_AUTHORIZED_PARTY (${configuredAzp})`,
+        );
+        return null;
+      }
+
 
       let email = verifiedPayload.email || verifiedPayload.email_address;
 
@@ -705,7 +760,67 @@ export class AuthService {
       this.otpStore.set(cleanPhone, otpData);
     }
 
-    this.logger.log(`SMS OTP enviado a ${cleanPhone}`);
+    const isProduction =
+      this.configService.get<string>('NODE_ENV') === 'production';
+    const twilioAccountSid =
+      this.configService.get<string>('TWILIO_ACCOUNT_SID');
+    const twilioAuthToken =
+      this.configService.get<string>('TWILIO_AUTH_TOKEN');
+    const twilioFrom =
+      this.configService.get<string>('TWILIO_PHONE_NUMBER');
+
+    if (twilioAccountSid && twilioAuthToken && twilioFrom) {
+      try {
+        const auth = Buffer.from(
+          `${twilioAccountSid}:${twilioAuthToken}`,
+        ).toString('base64');
+        const bodyParams = new URLSearchParams({
+          To: cleanPhone,
+          From: twilioFrom,
+          Body: `Tu código de verificación de Yewi es: ${code}. Válido por 5 minutos.`,
+        });
+
+        const twilioRes = await fetch(
+          `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/Messages.json`,
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Basic ${auth}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: bodyParams.toString(),
+          },
+        );
+
+        if (!twilioRes.ok) {
+          const errData = await twilioRes.text();
+          this.logger.error(`Error al enviar SMS vía Twilio: ${errData}`);
+          throw new ServiceUnavailableException(
+            'Error en el proveedor de SMS al entregar el código',
+          );
+        }
+        this.logger.log(`SMS OTP entregado vía Twilio a ${cleanPhone}`);
+      } catch (smsErr) {
+        if (smsErr instanceof ServiceUnavailableException) throw smsErr;
+        this.logger.error(`Fallo en la comunicación con Twilio: ${smsErr}`);
+        throw new ServiceUnavailableException(
+          'No se pudo conectar con el servicio de SMS',
+        );
+      }
+    } else {
+      if (isProduction) {
+        this.logger.error(
+          'TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_PHONE_NUMBER no están configurados en producción',
+        );
+        throw new ServiceUnavailableException(
+          'El servicio de envío de SMS no está configurado en el servidor',
+        );
+      } else {
+        this.logger.log(
+          `[DEV/TEST] SMS OTP generado para ${cleanPhone}: ${code}`,
+        );
+      }
+    }
 
     return {
       success: true,
@@ -713,6 +828,7 @@ export class AuthService {
       expiresInSeconds: 300,
     };
   }
+
 
   /**
    * 5. Verificar Código SMS OTP y generar sesión NestJS

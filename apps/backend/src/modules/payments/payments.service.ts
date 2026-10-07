@@ -15,12 +15,15 @@ import { CreatePaymentIntentDto } from './dto/create-payment-intent.dto';
 import { RealtimeService } from '../../common/realtime/realtime.service';
 import { RedisCacheService } from '../../common/cache/redis.service';
 import { OrdersService } from '../orders/orders.service';
+import { WalletService } from '../wallet/wallet.service';
+import { LeadsService } from '../leads/leads.service';
 
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
   private stripe: Stripe | null = null;
   private readonly processedEventIds = new Set<string>();
+  private readonly inFlightEventIds = new Set<string>();
 
   constructor(
     private readonly configService: ConfigService,
@@ -29,6 +32,12 @@ export class PaymentsService {
     @Optional()
     @Inject(forwardRef(() => OrdersService))
     private readonly ordersService?: OrdersService,
+    @Optional()
+    @Inject(forwardRef(() => WalletService))
+    private readonly walletService?: WalletService,
+    @Optional()
+    @Inject(forwardRef(() => LeadsService))
+    private readonly leadsService?: LeadsService,
     @Optional() private readonly redisCache?: RedisCacheService,
   ) {
     const apiKey = this.configService.get<string>('STRIPE_SECRET_KEY');
@@ -36,6 +45,7 @@ export class PaymentsService {
       this.stripe = new Stripe(apiKey);
     }
   }
+
 
   /**
    * Crear PaymentIntent en Stripe Real
@@ -351,9 +361,131 @@ export class PaymentsService {
   }
 
   /**
+   * Crear sesión de Stripe Checkout para recarga de saldo Fiat (Wallet Top-up)
+   */
+  async createWalletTopupCheckoutSession(params: {
+    userId: string;
+    userEmail?: string;
+    amount: number;
+    walletId: string;
+  }): Promise<{ url: string; sessionId: string }> {
+    if (!this.stripe) {
+      throw new ServiceUnavailableException(
+        'La pasarela de pagos Stripe no está configurada en el servidor',
+      );
+    }
+
+    try {
+      const amountInCents = Math.round(params.amount * 100);
+      const session = await this.stripe.checkout.sessions.create({
+        mode: 'payment',
+        payment_method_types: ['card'],
+        customer_email: params.userEmail,
+        line_items: [
+          {
+            price_data: {
+              currency: 'eur',
+              unit_amount: amountInCents,
+              product_data: {
+                name: `Recarga de saldo Yewi (${params.amount.toFixed(2)} €)`,
+                description: 'Acreditación de saldo en tu billetera digital Yewi',
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        metadata: {
+          userId: params.userId,
+          walletId: params.walletId,
+          paymentType: 'WALLET_TOPUP',
+          amount: String(params.amount),
+        },
+        success_url:
+          'https://yewi.app/wallet?topup=success&session_id={CHECKOUT_SESSION_ID}',
+        cancel_url: 'https://yewi.app/wallet?topup=cancelled',
+      });
+
+      return {
+        url: session.url ?? '',
+        sessionId: session.id,
+      };
+    } catch (checkoutErr: any) {
+      this.logger.error(
+        'Error al crear Checkout Session para recarga:',
+        checkoutErr,
+      );
+      throw new BadRequestException(
+        `Error de pasarela Stripe: ${checkoutErr.message}`,
+      );
+    }
+  }
+
+  /**
+   * Crear sesión de Stripe Checkout para aceptación de presupuesto de Lead (Escrow)
+   */
+  async createLeadOrderCheckoutSession(params: {
+    userId: string;
+    userEmail?: string;
+    proposalId: string;
+    title: string;
+    amount: number;
+  }): Promise<{ url: string; sessionId: string }> {
+    if (!this.stripe) {
+      throw new ServiceUnavailableException(
+        'La pasarela de pagos Stripe no está configurada en el servidor',
+      );
+    }
+
+    try {
+      const amountInCents = Math.round(params.amount * 100);
+      const session = await this.stripe.checkout.sessions.create({
+        mode: 'payment',
+        payment_method_types: ['card'],
+        customer_email: params.userEmail,
+        line_items: [
+          {
+            price_data: {
+              currency: 'eur',
+              unit_amount: amountInCents,
+              product_data: {
+                name: `Aceptación de Presupuesto - ${params.title}`,
+                description: 'Pago en custodia Escrow protegido por Yewi',
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        metadata: {
+          userId: params.userId,
+          paymentType: 'LEAD_ORDER_CHECKOUT',
+          proposalId: params.proposalId,
+          amount: String(params.amount),
+        },
+        success_url:
+          'https://yewi.app/leads/success?session_id={CHECKOUT_SESSION_ID}',
+        cancel_url: 'https://yewi.app/leads/cancel',
+      });
+
+      return {
+        url: session.url ?? '',
+        sessionId: session.id,
+      };
+    } catch (checkoutErr: any) {
+      this.logger.error(
+        'Error al crear Checkout Session para propuesta de lead:',
+        checkoutErr,
+      );
+      throw new BadRequestException(
+        `Error de pasarela Stripe: ${checkoutErr.message}`,
+      );
+    }
+  }
+
+  /**
    * Recuperar y verificar estado de una sesión de Stripe Checkout
    */
   async retrieveCheckoutSession(
+
     sessionId: string,
   ): Promise<Stripe.Checkout.Session> {
     if (!this.stripe) {
@@ -742,14 +874,18 @@ export class PaymentsService {
 
       this.logger.log(`Evento recibido de Stripe: ${event.type}`);
 
-      // 1. Control de Idempotencia estricto por event.id
-      if (this.processedEventIds.has(event.id)) {
+      // 1. Control de Idempotencia y protección estricta contra concurrencia
+      if (
+        this.processedEventIds.has(event.id) ||
+        this.inFlightEventIds.has(event.id)
+      ) {
         this.logger.log(
-          `Evento de Stripe duplicado ignorado (idempotencia en memoria): ${event.id}`,
+          `Evento de Stripe duplicado o en vuelo ignorado (idempotencia en memoria): ${event.id}`,
         );
         return { received: true, duplicate: true };
       }
 
+      let lockToken: string | null = null;
       if (this.redisCache) {
         const alreadyProcessed = await this.redisCache.get(
           `stripe:event:${event.id}`,
@@ -760,37 +896,104 @@ export class PaymentsService {
           );
           return { received: true, duplicate: true };
         }
+
+        lockToken = await this.redisCache.acquireLock(
+          `stripe:event:${event.id}`,
+          60,
+        );
+        if (!lockToken) {
+          this.logger.log(
+            `Evento de Stripe concurrente bloqueado por lock distribuido: ${event.id}`,
+          );
+          return { received: true, duplicate: true };
+        }
       }
 
-      switch (event.type) {
-        case 'checkout.session.completed': {
-          const session = event.data.object as any;
-          const userId = session.metadata?.userId;
-          const paymentType = session.metadata?.paymentType;
+      this.inFlightEventIds.add(event.id);
+      let processingSuccess = false;
 
-          if (paymentType === 'GIG_ORDER_CHECKOUT') {
-            this.logger.log(
-              `Stripe Checkout completado para Gig Order (Session: ${session.id}, User: ${userId}). Materializando orden en Escrow...`,
-            );
-            if (!this.ordersService || !userId) {
-              this.logger.error(
-                `OrdersService o userId no disponible para materializar la orden (Session: ${session.id}, userId: ${userId})`,
-              );
-              throw new InternalServerErrorException(
-                `Servicio de órdenes o userId no disponible para procesar sesión: ${session.id}`,
-              );
-            }
+      try {
+        switch (event.type) {
+          case 'checkout.session.completed': {
+            const session = event.data.object as any;
+            const userId = session.metadata?.userId;
+            const paymentType = session.metadata?.paymentType;
 
-            // Propagar error (responder 500) para que Stripe reintente si la base de datos o el servicio fallan
-            await this.ordersService.confirmGigCheckoutSession(
-              userId,
-              session.id,
-            );
-            this.logger.log(
-              `Orden y fondos retenidos en Escrow materializados exitosamente desde webhook para sesión: ${session.id}`,
-            );
-          } else if (userId && session.subscription) {
-            const subscriptionId =
+            if (paymentType === 'WALLET_TOPUP') {
+              this.logger.log(
+                `Stripe Checkout completado para WALLET_TOPUP (Session: ${session.id}, User: ${userId}). Acreditando saldo fiat...`,
+              );
+              if (!this.walletService || !userId) {
+                this.logger.error(
+                  `WalletService o userId no disponible para recarga (Session: ${session.id}, userId: ${userId})`,
+                );
+                throw new InternalServerErrorException(
+                  `Servicio de billetera o userId no disponible para procesar sesión: ${session.id}`,
+                );
+              }
+
+              const amount = Number(
+                session.metadata?.amount ??
+                  (session.amount_total ? session.amount_total / 100 : 0),
+              );
+              const paymentIntentId =
+                typeof session.payment_intent === 'string'
+                  ? session.payment_intent
+                  : session.payment_intent?.id;
+
+              await this.walletService.creditFiatDeposit({
+                userId,
+                amount,
+                paymentIntentId,
+                sessionId: session.id,
+              });
+              this.logger.log(
+                `Saldo fiat acreditado exitosamente para sesión: ${session.id}`,
+              );
+            } else if (paymentType === 'LEAD_ORDER_CHECKOUT') {
+              this.logger.log(
+                `Stripe Checkout completado para LEAD_ORDER_CHECKOUT (Session: ${session.id}, User: ${userId}). Materializando orden lead en Escrow...`,
+              );
+              if (!this.leadsService || !userId) {
+                this.logger.error(
+                  `LeadsService o userId no disponible para procesar orden lead (Session: ${session.id}, userId: ${userId})`,
+                );
+                throw new InternalServerErrorException(
+                  `Servicio de leads o userId no disponible para procesar sesión: ${session.id}`,
+                );
+              }
+
+              await this.leadsService.confirmLeadCheckoutSession(
+                userId,
+                session.id,
+              );
+              this.logger.log(
+                `Orden de lead materializada y retenida en Escrow para sesión: ${session.id}`,
+              );
+            } else if (paymentType === 'GIG_ORDER_CHECKOUT') {
+              this.logger.log(
+                `Stripe Checkout completado para Gig Order (Session: ${session.id}, User: ${userId}). Materializando orden en Escrow...`,
+              );
+              if (!this.ordersService || !userId) {
+                this.logger.error(
+                  `OrdersService o userId no disponible para materializar la orden (Session: ${session.id}, userId: ${userId})`,
+                );
+                throw new InternalServerErrorException(
+                  `Servicio de órdenes o userId no disponible para procesar sesión: ${session.id}`,
+                );
+              }
+
+              // Propagar error (responder 500) para que Stripe reintente si la base de datos o el servicio fallan
+              await this.ordersService.confirmGigCheckoutSession(
+                userId,
+                session.id,
+              );
+              this.logger.log(
+                `Orden y fondos retenidos en Escrow materializados exitosamente desde webhook para sesión: ${session.id}`,
+              );
+            } else if (userId && session.subscription) {
+              const subscriptionId =
+
               typeof session.subscription === 'string'
                 ? session.subscription
                 : session.subscription.id;
@@ -1050,24 +1253,59 @@ export class PaymentsService {
           break;
         }
 
+        case 'payment_intent.succeeded': {
+          const pi = event.data.object as any;
+          const userId = pi.metadata?.userId;
+          const paymentType = pi.metadata?.paymentType;
+
+          if (paymentType === 'WALLET_TOPUP' && userId && this.walletService) {
+            const amount = Number(
+              pi.metadata?.amount ?? (pi.amount ? pi.amount / 100 : 0),
+            );
+            if (amount > 0) {
+              await this.walletService.creditFiatDeposit({
+                userId,
+                amount,
+                paymentIntentId: pi.id,
+              });
+              this.logger.log(
+                `Depósito fiat acreditado vía payment_intent ${pi.id} para usuario ${userId}`,
+              );
+            }
+          }
+          break;
+        }
+
         default:
           this.logger.log(
             `Evento de Stripe no procesado directamente: ${event.type}`,
           );
       }
 
-      // 2. Registrar evento como exitoso en cache de idempotencia
-      this.processedEventIds.add(event.id);
-      if (this.processedEventIds.size > 10000) {
-        const first = this.processedEventIds.values().next().value;
-        if (first) this.processedEventIds.delete(first);
+      processingSuccess = true;
+    } finally {
+      this.inFlightEventIds.delete(event.id);
+      if (!processingSuccess && lockToken && this.redisCache) {
+        await this.redisCache.releaseLock(
+          `stripe:event:${event.id}`,
+          lockToken,
+        );
       }
+    }
 
-      if (this.redisCache) {
-        await this.redisCache.set(`stripe:event:${event.id}`, '1', 86400 * 7);
-      }
+    // 2. Registrar evento como exitoso en cache de idempotencia
+    this.processedEventIds.add(event.id);
+    if (this.processedEventIds.size > 10000) {
+      const first = this.processedEventIds.values().next().value;
+      if (first) this.processedEventIds.delete(first);
+    }
 
-      return { received: true };
+    if (this.redisCache) {
+      await this.redisCache.set(`stripe:event:${event.id}`, '1', 86400 * 7);
+    }
+
+    return { received: true };
+
     } catch (err: unknown) {
       if (
         err instanceof BadRequestException ||

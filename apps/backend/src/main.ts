@@ -1,6 +1,7 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import compression from 'compression';
 import { json, urlencoded } from 'express';
@@ -9,9 +10,12 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
   });
+
+  // 0. Habilitar trust proxy para que Throttler y Express lean la IP real del cliente detrás de proxies (Render, Cloudflare, etc.)
+  app.set('trust proxy', 1);
 
   // Configurar límite de payload JSON y urlencoded (10MB seguro para fotos de perfil, avatares y portafolio)
   // Se preserva req.rawBody para verificación criptográfica de firmas de webhooks (Stripe HMAC-SHA256)

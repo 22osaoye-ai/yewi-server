@@ -5,18 +5,16 @@ WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Copy root and package definitions
-COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml* ./
-COPY apps/backend/package.json ./apps/backend/
+# Copy package definitions and lockfile if present
+COPY package.json pnpm-lock.yaml* ./
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm install
 
-# Copy source and prisma schema
-COPY apps/backend ./apps/backend
+# Copy source, prisma schema and configurations
+COPY . .
 
 # Generate Prisma Client & Build
-WORKDIR /app/apps/backend
 RUN npx prisma generate
 RUN pnpm build
 
@@ -32,17 +30,16 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nestjs
 
-COPY --from=builder /app/package.json /app/pnpm-workspace.yaml* ./
-COPY --from=builder /app/apps/backend/package.json ./apps/backend/
+COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/backend/node_modules ./apps/backend/node_modules
-COPY --from=builder /app/apps/backend/dist ./apps/backend/dist
-COPY --from=builder /app/apps/backend/prisma ./apps/backend/prisma
-
-WORKDIR /app/apps/backend
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts* ./
 
 USER nestjs
 
 EXPOSE 3000
 
-CMD ["node", "dist/main.js"]
+# Ejecutar prisma migrate deploy antes de arrancar el servidor
+CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+

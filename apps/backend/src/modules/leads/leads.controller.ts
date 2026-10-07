@@ -132,7 +132,7 @@ export class LeadsController {
 
   @Post('proposals/:id/accept')
   @ApiOperation({
-    summary: 'Aceptar un presupuesto y formalizar pedido con Escrow (Cliente)',
+    summary: 'Aceptar un presupuesto y formalizar pedido con Escrow debitando la billetera (Cliente)',
   })
   @ApiResponse({
     status: 200,
@@ -144,6 +144,23 @@ export class LeadsController {
   ) {
     return this.leadsService.acceptProposal(userId, proposalId);
   }
+
+  @Post('proposals/:id/checkout')
+  @ApiOperation({
+    summary:
+      'Crear sesión de Stripe Checkout para pagar y formalizar pedido con tarjeta (Escrow)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'URL de Stripe Checkout generada',
+  })
+  async createLeadCheckoutSession(
+    @CurrentUser('id') userId: string,
+    @Param('id') proposalId: string,
+  ) {
+    return this.leadsService.createLeadCheckoutSession(userId, proposalId);
+  }
+
 
   @Get('requests/:id')
   @RawResponse()

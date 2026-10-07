@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  forwardRef,
+} from '@nestjs/common';
 import { TransactionStatus, TransactionType } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -8,6 +14,7 @@ import {
   CreateCreditPaymentIntentDto,
   CreditPack,
   RequestPayoutDto,
+  TopupWalletDto,
 } from './dto/buy-credits.dto';
 
 @Injectable()
@@ -23,8 +30,10 @@ export class WalletService {
 
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => PaymentsService))
     private readonly paymentsService: PaymentsService,
   ) {}
+
 
   /**
    * Obtener saldo de créditos, saldo fiat y transacciones recientes
@@ -307,5 +316,152 @@ export class WalletService {
     });
   }
 
+  /**
+   * Crear sesión de Stripe Checkout para recarga de saldo Fiat
+   */
+  async createTopupCheckoutSession(userId: string, dto: TopupWalletDto) {
+    if (dto.amount < 5) {
+      throw new BadRequestException('El importe mínimo de recarga es de 5 €');
+    }
+
+    const wallet = await this.getMyWallet(userId);
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+
+    const session = await this.paymentsService.createWalletTopupCheckoutSession({
+      userId,
+      userEmail: user?.email,
+      amount: dto.amount,
+      walletId: wallet.id,
+    });
+
+    // Registrar transacción PENDIENTE en el libro mayor
+    const ledgerTx = await this.prisma.ledgerTransaction.create({
+      data: {
+        walletId: wallet.id,
+        type: TransactionType.DEPOSIT,
+        amount: dto.amount,
+        currency: 'EUR',
+        status: TransactionStatus.PENDING,
+        metadata: {
+          sessionId: session.sessionId,
+          action: 'WALLET_TOPUP',
+        },
+      },
+    });
+
+    return {
+      url: session.url,
+      sessionId: session.sessionId,
+      amount: dto.amount,
+      transactionId: ledgerTx.id,
+    };
+  }
+
+  /**
+   * Acreditar recarga de saldo fiat de forma estrictamente idempotente y atómica
+   */
+  async creditFiatDeposit(params: {
+    userId: string;
+    amount: number;
+    paymentIntentId?: string;
+    sessionId?: string;
+  }) {
+    const { userId, amount, paymentIntentId, sessionId } = params;
+    const wallet = await this.getMyWallet(userId);
+
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Idempotencia en base de datos: comprobar si ya fue acreditado
+      const existingTx = await tx.ledgerTransaction.findFirst({
+        where: {
+          walletId: wallet.id,
+          type: TransactionType.DEPOSIT,
+          status: TransactionStatus.COMPLETED,
+          OR: [
+            ...(paymentIntentId ? [{ stripePaymentIntentId: paymentIntentId }] : []),
+            ...(sessionId ? [{ metadata: { path: ['sessionId'], equals: sessionId } }] : []),
+          ],
+        },
+      });
+
+      if (existingTx) {
+        this.logger.log(
+          `Depósito fiat ya procesado previamente para usuario ${userId} (tx: ${existingTx.id})`,
+        );
+        return { success: true, alreadyProcessed: true, transactionId: existingTx.id };
+      }
+
+      // 2. Buscar si existía una transacción PENDING para esta sesión/intent
+      const pendingTx = await tx.ledgerTransaction.findFirst({
+        where: {
+          walletId: wallet.id,
+          type: TransactionType.DEPOSIT,
+          status: TransactionStatus.PENDING,
+          OR: [
+            ...(sessionId ? [{ metadata: { path: ['sessionId'], equals: sessionId } }] : []),
+            ...(paymentIntentId ? [{ stripePaymentIntentId: paymentIntentId }] : []),
+          ],
+        },
+      });
+
+      let ledgerTxId: string;
+
+      if (pendingTx) {
+        // Transición atómica de PENDING a COMPLETED garantizando ejecución única
+        const updateResult = await tx.ledgerTransaction.updateMany({
+          where: {
+            id: pendingTx.id,
+            status: TransactionStatus.PENDING,
+          },
+          data: {
+            status: TransactionStatus.COMPLETED,
+            stripePaymentIntentId: paymentIntentId ?? pendingTx.stripePaymentIntentId,
+          },
+        });
+
+        if (updateResult.count !== 1) {
+          this.logger.warn(`Transacción ${pendingTx.id} ya fue completada concurrentemente`);
+          return { success: true, alreadyProcessed: true };
+        }
+        ledgerTxId = pendingTx.id;
+      } else {
+        const newLedger = await tx.ledgerTransaction.create({
+          data: {
+            walletId: wallet.id,
+            type: TransactionType.DEPOSIT,
+            amount,
+            currency: 'EUR',
+            status: TransactionStatus.COMPLETED,
+            stripePaymentIntentId: paymentIntentId ?? null,
+            metadata: {
+              sessionId: sessionId ?? null,
+              action: 'WALLET_TOPUP',
+            },
+          },
+        });
+        ledgerTxId = newLedger.id;
+      }
+
+      // 3. Incrementar saldo fiat disponible
+      const updatedWallet = await tx.wallet.update({
+        where: { id: wallet.id },
+        data: {
+          fiatAvailableBalance: { increment: amount },
+        },
+      });
+
+      this.logger.log(
+        `Saldo fiat acreditado exitosamente: +${amount} € para usuario ${userId}. Nuevo saldo: ${updatedWallet.fiatAvailableBalance} €`,
+      );
+
+      return {
+        success: true,
+        transactionId: ledgerTxId,
+        newAvailableBalance: updatedWallet.fiatAvailableBalance,
+      };
+    });
+  }
 }
 

@@ -150,8 +150,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     const dto = 'dto' in data && data.dto ? data.dto : (data as unknown as SendMessageDto);
-    if (!dto || !dto.conversationId || !dto.content) {
+    if (!dto || !dto.conversationId || !dto.content || typeof dto.content !== 'string') {
       return { status: 'error', message: 'Datos de mensaje incompletos' };
+    }
+
+    if (dto.content.length > 4000) {
+      return {
+        status: 'error',
+        message: 'El contenido del mensaje excede el límite máximo de 4000 caracteres',
+      };
     }
 
     try {

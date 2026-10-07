@@ -2,9 +2,13 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
   Optional,
+  ServiceUnavailableException,
+  forwardRef,
 } from '@nestjs/common';
 import {
   EscrowStatus,
@@ -27,14 +31,21 @@ import { CreateQuoteProposalDto } from './dto/create-quote-proposal.dto';
 import { CreateServiceRequestDto } from './dto/create-service-request.dto';
 import { FilterLeadsDto } from './dto/filter-leads.dto';
 import { RealtimeService } from '../../common/realtime/realtime.service';
+import { PaymentsService } from '../payments/payments.service';
 
 @Injectable()
 export class LeadsService {
+  private readonly logger = new Logger(LeadsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly realtime?: RealtimeService,
     @Optional() private readonly configService?: ConfigService,
+    @Optional()
+    @Inject(forwardRef(() => PaymentsService))
+    private readonly paymentsService?: PaymentsService,
   ) {}
+
 
   /**
    * Crear una solicitud de servicio (Cliente - ProntoPro Style)
@@ -1030,4 +1041,248 @@ export class LeadsService {
       conversationId: result.conversation.id,
     };
   }
+
+  /**
+   * Crear sesión de Stripe Checkout para pagar directamente la propuesta de presupuesto
+   */
+  async createLeadCheckoutSession(userId: string, proposalId: string) {
+    if (!this.paymentsService) {
+      throw new ServiceUnavailableException(
+        'La pasarela de pagos Stripe no está configurada en el servidor',
+      );
+    }
+
+    const proposal = await this.prisma.quoteProposal.findUnique({
+      where: { id: proposalId },
+      include: {
+        serviceRequest: true,
+      },
+    });
+
+    if (!proposal || proposal.serviceRequest.clientId !== userId) {
+      throw new ForbiddenException(
+        'Presupuesto no válido o no eres el propietario',
+      );
+    }
+
+    if (proposal.status !== ProposalStatus.PENDING) {
+      throw new BadRequestException('El presupuesto ya ha sido procesado');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+
+    return this.paymentsService.createLeadOrderCheckoutSession({
+      userId,
+      userEmail: user?.email,
+      proposalId: proposal.id,
+      title: proposal.serviceRequest.title,
+      amount: Number(proposal.price),
+    });
+  }
+
+  /**
+   * Confirmar la orden de propuesta pagada mediante Stripe Checkout (Escrow HELD)
+   */
+  async confirmLeadCheckoutSession(userId: string, sessionId: string) {
+    if (!this.paymentsService) {
+      throw new ServiceUnavailableException('Servicio de pagos no disponible');
+    }
+
+    const session =
+      await this.paymentsService.retrieveCheckoutSession(sessionId);
+    const proposalId = session.metadata?.proposalId;
+
+    if (!proposalId) {
+      throw new BadRequestException(
+        'La sesión de checkout no contiene la referencia del presupuesto',
+      );
+    }
+
+    const paymentIntentId =
+      typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : (session.payment_intent as any)?.id;
+
+    // Idempotencia: Verificar si ya existe orden creada para este presupuesto o sesión
+    const existingOrder = await this.prisma.order.findFirst({
+      where: {
+        OR: [
+          { quoteProposalId: proposalId },
+          {
+            ledgerTransactions: {
+              some: {
+                OR: [
+                  ...(paymentIntentId
+                    ? [{ stripePaymentIntentId: paymentIntentId }]
+                    : []),
+                  { metadata: { path: ['sessionId'], equals: sessionId } },
+                ],
+              },
+            },
+          },
+        ],
+      },
+      include: {
+        quoteProposal: true,
+        serviceRequest: true,
+        professionalProfile: {
+          include: { user: true },
+        },
+      },
+    });
+
+    if (existingOrder) {
+      this.logger.log(
+        `Orden de presupuesto ya materializada para sesión ${sessionId}`,
+      );
+      return existingOrder;
+    }
+
+    const proposal = await this.prisma.quoteProposal.findUnique({
+      where: { id: proposalId },
+      include: {
+        serviceRequest: true,
+        professionalProfile: {
+          include: { user: true },
+        },
+      },
+    });
+
+    if (!proposal) {
+      throw new NotFoundException('Propuesta de presupuesto no encontrada');
+    }
+
+    const price = Number(proposal.price);
+    const platformCommissionPercent = Number(
+      this.configService?.get('PLATFORM_COMMISSION_PERCENTAGE') ?? 15,
+    );
+    const platformFee =
+      Math.round(price * (platformCommissionPercent / 100) * 100) / 100;
+    const proEarnings = Math.round((price - platformFee) * 100) / 100;
+    const totalAmount =
+      session.amount_total !== undefined && session.amount_total !== null
+        ? session.amount_total / 100
+        : price;
+
+    const deliveryDeadline = new Date();
+    deliveryDeadline.setDate(
+      deliveryDeadline.getDate() + proposal.estimatedDays,
+    );
+
+    const orderNumber = `ORD-LEAD-${Date.now()}-${randomBytes(3).toString('hex').toUpperCase()}`;
+
+    let clientWallet = await this.prisma.wallet.findUnique({
+      where: { userId },
+    });
+
+    if (!clientWallet) {
+      clientWallet = await this.prisma.wallet.create({
+        data: {
+          userId,
+          creditBalance: 0,
+          fiatAvailableBalance: 0,
+          fiatPendingBalance: 0,
+        },
+      });
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. Registrar transacción en el libro mayor con el ID de Stripe real
+      const ledgerTx = await tx.ledgerTransaction.create({
+        data: {
+          walletId: clientWallet.id,
+          type: TransactionType.ORDER_PAYMENT,
+          amount: -totalAmount,
+          currency: 'EUR',
+          status: TransactionStatus.COMPLETED,
+          stripePaymentIntentId: paymentIntentId ?? null,
+          metadata: {
+            orderNumber,
+            sessionId,
+            stripePaymentIntentId: paymentIntentId ?? null,
+            action: 'STRIPE_ESCROW_DEPOSIT',
+          },
+        },
+      });
+
+      // 2. Aceptar presupuesto y rechazar concurrentes
+      await tx.quoteProposal.update({
+        where: { id: proposalId },
+        data: { status: ProposalStatus.ACCEPTED },
+      });
+
+      await tx.quoteProposal.updateMany({
+        where: {
+          serviceRequestId: proposal.serviceRequestId,
+          id: { not: proposalId },
+        },
+        data: { status: ProposalStatus.REJECTED },
+      });
+
+      // 3. Cerrar solicitud como asignada
+      await tx.serviceRequest.update({
+        where: { id: proposal.serviceRequestId },
+        data: { status: LeadStatus.FULFILLED },
+      });
+
+      // 4. Crear pedido con estado de Escrow HELD
+      const order = await tx.order.create({
+        data: {
+          orderNumber,
+          clientId: userId,
+          professionalProfileId: proposal.professionalProfileId,
+          orderType: OrderType.LEAD_CONTRACT,
+          quoteProposalId: proposal.id,
+          serviceRequestId: proposal.serviceRequestId,
+          status: OrderStatus.IN_PROGRESS,
+          subtotal: price,
+          platformFee,
+          totalAmount,
+          proEarnings,
+          escrowStatus: EscrowStatus.HELD,
+          deliveryDeadline,
+        },
+      });
+
+      // 5. Vincular transacción de ledger a la orden
+      await tx.ledgerTransaction.update({
+        where: { id: ledgerTx.id },
+        data: { referenceId: order.id },
+      });
+
+      // 6. Crear conversación de chat vinculada
+      const conversation = await tx.conversation.create({
+        data: {
+          orderId: order.id,
+          serviceRequestId: proposal.serviceRequestId,
+          participantAId: userId,
+          participantBId: proposal.professionalProfile.user.id,
+        },
+      });
+
+      // 7. Notificar al profesional
+      const notification = await tx.notification.create({
+        data: {
+          userId: proposal.professionalProfile.user.id,
+          type: NotificationType.QUOTE_ACCEPTED,
+          title: '¡Tu presupuesto ha sido aceptado y pagado!',
+          message: `El cliente ha pagado ${totalAmount} € con tarjeta. Fondos retenidos en Escrow (Pedido ${orderNumber}).`,
+          link: `/orders/${order.id}`,
+        },
+      });
+
+      return { order, conversation, notification };
+    });
+
+    this.realtime?.emitNotification(result.notification);
+
+    return {
+      ...result.order,
+      conversationId: result.conversation.id,
+    };
+  }
 }
+

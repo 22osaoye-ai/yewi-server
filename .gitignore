@@ -61,4 +61,5 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # Local scripts and temporary skill archives
 *.skill
 wifi_*.bat
+*.zip
 

@@ -13,6 +13,7 @@ import {
   ConfirmCreditPaymentDto,
   CreateCreditPaymentIntentDto,
   RequestPayoutDto,
+  TopupWalletDto,
 } from './dto/buy-credits.dto';
 import { WalletService } from './wallet.service';
 
@@ -112,6 +113,23 @@ export class WalletController {
     @Body() dto: RequestPayoutDto,
   ) {
     return this.walletService.requestPayout(userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @Post('topup')
+  @ApiOperation({
+    summary: 'Iniciar recarga de saldo fiat con pasarela Stripe Checkout',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Sesión de Checkout creada para recarga de saldo fiat',
+  })
+  async topupWallet(
+    @CurrentUser('id') userId: string,
+    @Body() dto: TopupWalletDto,
+  ) {
+    return this.walletService.createTopupCheckoutSession(userId, dto);
   }
 }
 

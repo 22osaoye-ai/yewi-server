@@ -1,0 +1,42 @@
+name: Yewi CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test-backend:
+    name: Backend Tests & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile || pnpm install
+
+      - name: Generate Prisma Client
+        run: pnpm --filter backend exec prisma generate
+
+      - name: Run Backend Tests
+        run: pnpm --filter backend test
+        env:
+          JWT_SECRET: test_ci_jwt_secret_key_1234567890
+          JWT_REFRESH_SECRET: test_ci_jwt_refresh_secret_key_1234567890
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+
+      - name: Build Backend
+        run: pnpm --filter backend build

@@ -7,6 +7,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  MaxLength,
 } from 'class-validator';
 
 export class SendMessageDto {
@@ -20,6 +21,9 @@ export class SendMessageDto {
   })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(4000, {
+    message: 'El contenido del mensaje no puede superar los 4000 caracteres',
+  })
   content: string;
 
   @ApiPropertyOptional({ enum: MessageType, default: MessageType.TEXT })
