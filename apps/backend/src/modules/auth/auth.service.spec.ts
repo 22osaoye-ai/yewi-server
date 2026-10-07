@@ -128,4 +128,30 @@ describe('AuthService', () => {
       expect(res.taxId?.message).toBe('NIF/CIF ya registrado');
     });
   });
+
+  describe('loginWithGoogle', () => {
+    it('should throw UnauthorizedException if idToken is empty', async () => {
+      await expect(
+        service.loginWithGoogle({ idToken: '' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException if token cannot be verified', async () => {
+      const originalFetch = global.fetch;
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        json: async () => ({ error: 'invalid_token' }),
+      }) as any;
+
+      try {
+        await expect(
+          service.loginWithGoogle({ idToken: 'invalid-or-unverified-token' }),
+        ).rejects.toThrow(UnauthorizedException);
+      } finally {
+        global.fetch = originalFetch;
+      }
+    });
+  });
 });
+

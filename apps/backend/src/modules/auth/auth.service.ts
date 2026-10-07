@@ -8,6 +8,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomInt } from 'crypto';
+import * as crypto from 'crypto';
+import * as jwt from 'jsonwebtoken';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { UserRole } from '@prisma/client';
@@ -33,6 +35,7 @@ interface StoredOtp {
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private readonly otpStore = new Map<string, StoredOtp>();
+  private clerkJwksCache: { keys: any[]; fetchedAt: number } | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -279,65 +282,202 @@ export class AuthService {
   }
 
   /**
-   * 3. Google OAuth Social Login con NestJS Passport
+   * Verifica criptográficamente un Google ID Token con Google OAuth2 TokenInfo
+   * Comprueba firma, emisor oficial (accounts.google.com), email verificado y audiencia (GOOGLE_CLIENT_ID)
    */
-  async loginWithGoogle(dto: GoogleAuthDto) {
-    if (!dto.idToken && !dto.email) {
-      throw new UnauthorizedException(
-        'Se requiere un token de identidad válido (idToken) o un correo electrónico para iniciar sesión',
-      );
-    }
-
-    let verifiedEmail = dto.email;
-    let verifiedName = dto.name;
-    let verifiedAvatar = dto.avatarUrl;
-
-    // Intentar verificación con el endpoint oficial de Google TokenInfo
+  private async verifyGoogleIdToken(idToken: string): Promise<{
+    email: string;
+    name?: string;
+    picture?: string;
+  } | null> {
     try {
-      if (dto.idToken && (dto.idToken.startsWith('eyJ') || dto.idToken.length > 50)) {
-        const verifyRes = await fetch(
-          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(dto.idToken)}`,
-        );
-        if (verifyRes.ok) {
-          const tokenInfo = (await verifyRes.json()) as {
-            email?: string;
-            name?: string;
-            picture?: string;
-          };
-          if (tokenInfo.email) {
-            verifiedEmail = tokenInfo.email;
-            verifiedName = tokenInfo.name || verifiedName;
-            verifiedAvatar = tokenInfo.picture || verifiedAvatar;
-          }
-        } else {
-          // Si no es un Google ID token directo, intentar decodificar payload JWT (ej. Clerk / Firebase)
-          const decoded = this.jwtService.decode(dto.idToken) as any;
-          if (decoded) {
-            verifiedEmail = decoded.email || verifiedEmail;
-            verifiedName =
-              decoded.name ||
-              (decoded.given_name && decoded.family_name
-                ? `${decoded.given_name} ${decoded.family_name}`
-                : decoded.given_name) ||
-              verifiedName;
-            verifiedAvatar = decoded.picture || decoded.avatar_url || verifiedAvatar;
+      const verifyRes = await fetch(
+        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
+      );
+      if (!verifyRes.ok) {
+        return null;
+      }
+      const tokenInfo = (await verifyRes.json()) as {
+        iss?: string;
+        aud?: string;
+        email?: string;
+        email_verified?: string | boolean;
+        name?: string;
+        picture?: string;
+      };
+
+      // 1. Validar emisor oficial de Google
+      const isValidIssuer =
+        tokenInfo.iss === 'accounts.google.com' ||
+        tokenInfo.iss === 'https://accounts.google.com';
+      if (!isValidIssuer) {
+        this.logger.warn(`Google tokeninfo: emisor no válido (${tokenInfo.iss})`);
+        return null;
+      }
+
+      // 2. Validar que el email esté verificado por Google
+      const isEmailVerified =
+        tokenInfo.email_verified === 'true' ||
+        tokenInfo.email_verified === true;
+      if (!isEmailVerified || !tokenInfo.email) {
+        this.logger.warn('Google tokeninfo: email no verificado o ausente');
+        return null;
+      }
+
+      // 3. Validar audiencia (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_IDS) si está configurada
+      const googleClientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
+      const googleClientIds = this.configService.get<string>('GOOGLE_CLIENT_IDS');
+      const allowedAudiences = [
+        googleClientId,
+        ...(googleClientIds ? googleClientIds.split(',').map((id) => id.trim()) : []),
+      ].filter(Boolean) as string[];
+
+      if (allowedAudiences.length > 0) {
+        if (!tokenInfo.aud || !allowedAudiences.includes(tokenInfo.aud)) {
+          this.logger.warn(
+            `Google tokeninfo: aud (${tokenInfo.aud}) no coincide con ningún cliente configurado`,
+          );
+          return null;
+        }
+      }
+
+      return {
+        email: tokenInfo.email.toLowerCase().trim(),
+        name: tokenInfo.name,
+        picture: tokenInfo.picture,
+      };
+    } catch (err) {
+      this.logger.warn(`Error al verificar token con Google TokenInfo: ${err}`);
+      return null;
+    }
+  }
+
+  /**
+   * Verifica criptográficamente la firma RSA de un token de Clerk mediante sus claves públicas JWKS
+   */
+  private async verifyClerkToken(idToken: string): Promise<{
+    email: string;
+    name?: string;
+    picture?: string;
+  } | null> {
+    try {
+      const decodedComplete = jwt.decode(idToken, { complete: true }) as {
+        header?: { kid?: string; alg?: string };
+        payload?: any;
+      } | null;
+
+      if (!decodedComplete?.header?.kid) {
+        return null;
+      }
+
+      const kid = decodedComplete.header.kid;
+      const jwksUrl =
+        this.configService.get<string>('CLERK_JWKS_URL') ||
+        'https://certain-sailfish-4270.clerk.accounts.dev/.well-known/jwks.json';
+
+      // Reutilizar cache por 1 hora
+      const now = Date.now();
+      if (!this.clerkJwksCache || now - this.clerkJwksCache.fetchedAt > 3600000) {
+        const jwksRes = await fetch(jwksUrl);
+        if (jwksRes.ok) {
+          const jwksData = (await jwksRes.json()) as { keys: any[] };
+          this.clerkJwksCache = { keys: jwksData.keys || [], fetchedAt: now };
+        }
+      }
+
+      const matchingKey = this.clerkJwksCache?.keys.find((k) => k.kid === kid);
+      if (!matchingKey) {
+        this.logger.warn(`Clerk JWKS: No se encontró clave para kid ${kid}`);
+        return null;
+      }
+
+      const publicKey = crypto.createPublicKey({
+        key: matchingKey,
+        format: 'jwk',
+      });
+
+      const verifiedPayload = jwt.verify(idToken, publicKey, {
+        algorithms: ['RS256'],
+      }) as {
+        sub?: string;
+        email?: string;
+        email_address?: string;
+        name?: string;
+        picture?: string;
+      };
+
+      if (!verifiedPayload) {
+        return null;
+      }
+
+      let email = verifiedPayload.email || verifiedPayload.email_address;
+
+      if (!email && verifiedPayload.sub) {
+        const clerkSecretKey = this.configService.get<string>('CLERK_SECRET_KEY');
+        if (clerkSecretKey) {
+          const userRes = await fetch(
+            `https://api.clerk.com/v1/users/${verifiedPayload.sub}`,
+            {
+              headers: { Authorization: `Bearer ${clerkSecretKey}` },
+            },
+          );
+          if (userRes.ok) {
+            const userData = (await userRes.json()) as any;
+            const primaryEmail = userData.email_addresses?.find(
+              (e: any) => e.id === userData.primary_email_address_id,
+            );
+            if (primaryEmail?.verification?.status === 'verified') {
+              email = primaryEmail.email_address;
+            }
           }
         }
       }
+
+      if (!email) {
+        this.logger.warn('Clerk token verificado pero no contiene email verificado');
+        return null;
+      }
+
+      return {
+        email: email.toLowerCase().trim(),
+        name: verifiedPayload.name,
+        picture: verifiedPayload.picture,
+      };
     } catch (err) {
-      this.logger.warn(`Aviso en verificación de idToken: ${err}`);
+      this.logger.warn(`Fallo al verificar firma criptográfica de Clerk: ${err}`);
+      return null;
+    }
+  }
+
+  /**
+   * 3. Google / Social Login con verificación criptográfica estricta obligatoria
+   */
+  async loginWithGoogle(dto: GoogleAuthDto) {
+    if (!dto.idToken || typeof dto.idToken !== 'string' || !dto.idToken.trim()) {
+      throw new UnauthorizedException(
+        'Se requiere un token de identidad criptográficamente válido (idToken) para iniciar sesión',
+      );
     }
 
-    if (!verifiedEmail) {
+    // 1. Intentar verificación criptográfica con Google
+    let verifiedIdentity = await this.verifyGoogleIdToken(dto.idToken);
+
+    // 2. Si no es de Google, intentar verificación criptográfica con Clerk (JWKS)
+    if (!verifiedIdentity) {
+      verifiedIdentity = await this.verifyClerkToken(dto.idToken);
+    }
+
+    // 3. Si ninguna verificación criptográfica tuvo éxito, RECHAZAR tajantemente (cero decodificación sin firma)
+    if (!verifiedIdentity || !verifiedIdentity.email) {
       throw new UnauthorizedException(
-        'No se pudo verificar la identidad del token social proporcionado',
+        'No se pudo verificar la firma criptográfica o la autenticidad del token social proporcionado',
       );
     }
 
     return this.loginWithVerifiedGoogleIdentity({
-      email: verifiedEmail,
-      name: verifiedName,
-      avatarUrl: verifiedAvatar,
+      email: verifiedIdentity.email,
+      name: verifiedIdentity.name || dto.name,
+      avatarUrl: verifiedIdentity.picture || dto.avatarUrl,
     });
   }
 

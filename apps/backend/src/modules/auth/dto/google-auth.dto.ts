@@ -1,23 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '@prisma/client';
-import { IsArray, IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class GoogleAuthDto {
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: 'eyJhbGciOiJSUzI1NiIsImtpZCI6...',
-    description: 'Google ID Token',
+    description: 'Google ID Token o Clerk Session Token verificado criptográficamente',
   })
-  @IsOptional()
+  @IsNotEmpty({ message: 'El idToken es obligatorio para iniciar sesión con Google' })
   @IsString()
-  idToken?: string;
-
-  @ApiPropertyOptional({
-    example: 'usuario@gmail.com',
-    description: 'Correo electrónico de Google verificado',
-  })
-  @IsOptional()
-  @IsString()
-  email?: string;
+  idToken: string;
 
   @ApiPropertyOptional({
     example: 'Amalio Osa',

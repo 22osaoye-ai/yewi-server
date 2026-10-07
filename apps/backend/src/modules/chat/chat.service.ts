@@ -18,6 +18,22 @@ export class ChatService {
   ) {}
 
   /**
+   * Comprueba si un usuario es participante legítimo de una conversación
+   */
+  async isParticipant(conversationId: string, userId: string): Promise<boolean> {
+    if (!conversationId || !userId) return false;
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { participantAId: true, participantBId: true },
+    });
+    if (!conversation) return false;
+    return (
+      conversation.participantAId === userId ||
+      conversation.participantBId === userId
+    );
+  }
+
+  /**
    * Buscar o crear automáticamente la conversación por ConversationId u OrderId o ServiceRequestId o UserId/ProProfileId
    */
   async findOrCreateConversation(userId: string, targetId: string) {

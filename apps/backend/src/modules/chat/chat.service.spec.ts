@@ -14,6 +14,7 @@ describe('ChatService', () => {
       findMany: jest.fn(),
     },
     conversation: {
+      findUnique: jest.fn(),
       findFirst: jest.fn(),
       findMany: jest.fn(),
       create: jest.fn(),
@@ -143,4 +144,40 @@ describe('ChatService', () => {
       expect(contacts[0].category).toBe('Reformas');
     });
   });
+
+  describe('isParticipant', () => {
+    it('should return true if user is participantA', async () => {
+      mockPrisma.conversation.findUnique.mockResolvedValue({
+        participantAId: 'user-1',
+        participantBId: 'user-2',
+      });
+      const result = await service.isParticipant('conv-1', 'user-1');
+      expect(result).toBe(true);
+    });
+
+    it('should return true if user is participantB', async () => {
+      mockPrisma.conversation.findUnique.mockResolvedValue({
+        participantAId: 'user-1',
+        participantBId: 'user-2',
+      });
+      const result = await service.isParticipant('conv-1', 'user-2');
+      expect(result).toBe(true);
+    });
+
+    it('should return false if user is not in conversation', async () => {
+      mockPrisma.conversation.findUnique.mockResolvedValue({
+        participantAId: 'user-1',
+        participantBId: 'user-2',
+      });
+      const result = await service.isParticipant('conv-1', 'user-intruder');
+      expect(result).toBe(false);
+    });
+
+    it('should return false if conversation does not exist', async () => {
+      mockPrisma.conversation.findUnique.mockResolvedValue(null);
+      const result = await service.isParticipant('non-existent', 'user-1');
+      expect(result).toBe(false);
+    });
+  });
 });
+
