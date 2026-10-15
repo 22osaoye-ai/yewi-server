@@ -1107,24 +1107,8 @@ export class LeadsService {
         : (session.payment_intent as any)?.id;
 
     // Idempotencia: Verificar si ya existe orden creada para este presupuesto o sesión
-    const existingOrder = await this.prisma.order.findFirst({
-      where: {
-        OR: [
-          { quoteProposalId: proposalId },
-          {
-            ledgerTransactions: {
-              some: {
-                OR: [
-                  ...(paymentIntentId
-                    ? [{ stripePaymentIntentId: paymentIntentId }]
-                    : []),
-                  { metadata: { path: ['sessionId'], equals: sessionId } },
-                ],
-              },
-            },
-          },
-        ],
-      },
+    let existingOrder = await this.prisma.order.findFirst({
+      where: { quoteProposalId: proposalId },
       include: {
         quoteProposal: true,
         serviceRequest: true,
@@ -1133,6 +1117,33 @@ export class LeadsService {
         },
       },
     });
+
+    if (!existingOrder) {
+      const existingTx = await this.prisma.ledgerTransaction.findFirst({
+        where: {
+          OR: [
+            ...(paymentIntentId
+              ? [{ stripePaymentIntentId: paymentIntentId }]
+              : []),
+            { metadata: { path: ['sessionId'], equals: sessionId } },
+          ],
+          referenceId: { not: null },
+        },
+      });
+
+      if (existingTx?.referenceId) {
+        existingOrder = await this.prisma.order.findUnique({
+          where: { id: existingTx.referenceId },
+          include: {
+            quoteProposal: true,
+            serviceRequest: true,
+            professionalProfile: {
+              include: { user: true },
+            },
+          },
+        });
+      }
+    }
 
     if (existingOrder) {
       this.logger.log(

@@ -142,7 +142,8 @@ export class UsersService {
           in: [
             OrderStatus.PENDING_REQUIREMENTS,
             OrderStatus.IN_PROGRESS,
-            OrderStatus.IN_DELIVERY,
+            OrderStatus.DELIVERED,
+            OrderStatus.REVISION_REQUESTED,
             OrderStatus.DISPUTED,
           ],
         },

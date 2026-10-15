@@ -5,6 +5,7 @@ import {
   InternalServerErrorException,
   Logger,
   Optional,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { randomInt } from 'crypto';

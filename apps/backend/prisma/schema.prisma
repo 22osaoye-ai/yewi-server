@@ -98,6 +98,7 @@ enum TransactionType {
   PLATFORM_FEE
   PAYOUT_WITHDRAWAL
   ORDER_REFUND
+  DEPOSIT
 }
 
 enum TransactionStatus {
