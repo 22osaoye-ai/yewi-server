@@ -170,7 +170,6 @@ function RootNavigation({ isFontsReady }: { isFontsReady: boolean }) {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="detail" options={{ headerShown: false }} />
         <Stack.Screen name="request-detail" options={{ headerShown: false }} />
-        <Stack.Screen name="chat" options={{ headerShown: false }} />
         <Stack.Screen name="professional-profile" options={{ headerShown: false }} />
         <Stack.Screen name="subscription" options={{ headerShown: false }} />
         <Stack.Screen name="notifications" options={{ headerShown: false }} />

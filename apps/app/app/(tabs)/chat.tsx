@@ -99,6 +99,7 @@ export default function ChatScreen() {
   const removeOptimisticMessage = useChatStore((s) => s.removeOptimisticMessage);
   const toggleMessageReaction = useChatStore((s) => s.toggleMessageReaction);
   const initRealtimeObserver = useChatStore((s) => s.initRealtimeObserver);
+  const setActiveConversationId = useChatStore((s) => s.setActiveConversationId);
 
   // Derived 1-on-1 state from cache (0ms instant render when cached)
   const cachedItem = activeTargetId ? conversationCache[activeTargetId] : null;
@@ -146,19 +147,14 @@ export default function ChatScreen() {
           if (router.canGoBack()) {
             router.back();
           } else {
-            router.replace('/(tabs)');
+            setActiveTargetId(null);
           }
           return true;
         }
         setActiveTargetId(null);
         return true;
       }
-      if (router.canGoBack()) {
-        router.back();
-        return true;
-      }
-      router.replace('/(tabs)');
-      return true;
+      return false;
     };
 
     const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
@@ -237,6 +233,14 @@ export default function ChatScreen() {
       fetchContacts(false);
     }
   }, [activeTargetId, fetchConversations, fetchStories, fetchContacts]);
+
+  // Synchronize active conversation with global store so bottom tab bar knows when to hide
+  useEffect(() => {
+    setActiveConversationId(activeTargetId);
+    return () => {
+      setActiveConversationId(null);
+    };
+  }, [activeTargetId, setActiveConversationId]);
 
   // Load 1-on-1 Conversation detail (SWR: 0ms if already cached)
   const loadConversationDetail = useCallback(
@@ -747,7 +751,17 @@ export default function ChatScreen() {
             fallbackName={params.targetName}
             unreadCount={unreadTotalCount}
             isTyping={isOtherTyping}
-            onBack={() => setActiveTargetId(null)}
+            onBack={() => {
+              if (params.conversationId || params.id || params.targetUserId || params.orderId || params.requestId) {
+                if (router.canGoBack()) {
+                  router.back();
+                } else {
+                  setActiveTargetId(null);
+                }
+              } else {
+                setActiveTargetId(null);
+              }
+            }}
             onPressProfile={() => setShowProfileModal(true)}
           />
 
@@ -978,25 +992,9 @@ export default function ChatScreen() {
         ]}
       >
         <View style={styles.hubTitleRow}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <ThemedTouchable
-              onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)'))}
-              haptic="light"
-              style={[
-                styles.headerIconBtn,
-                {
-                  backgroundColor: colors.surface,
-                  borderWidth: 1,
-                  borderColor: colors.borderSubtle,
-                },
-              ]}
-            >
-              <Ionicons name="arrow-back" size={20} color={colors.textPrimary} />
-            </ThemedTouchable>
-            <Text style={[styles.hubMainTitle, { color: colors.textPrimary }]}>
-              Mensajes
-            </Text>
-          </View>
+          <Text style={[styles.hubMainTitle, { color: colors.textPrimary }]}>
+            Mensajes
+          </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <ThemedTouchable
               onPress={() => setActiveTab('CONTACTOS')}
@@ -1114,7 +1112,7 @@ export default function ChatScreen() {
                 tintColor={colors.primary}
               />
             }
-            contentContainerStyle={{ paddingVertical: 8, paddingBottom: 90 }}
+            contentContainerStyle={{ paddingVertical: 8, paddingBottom: Math.max(insets.bottom + 85, 110) }}
             ListEmptyComponent={() => (
               <View style={styles.emptyContainer}>
                 <View style={[styles.emptyIconCircle, { backgroundColor: colors.primaryLight }]}>
@@ -1230,7 +1228,7 @@ export default function ChatScreen() {
                 tintColor={colors.primary}
               />
             }
-            contentContainerStyle={{ paddingVertical: 14, paddingBottom: 90 }}
+            contentContainerStyle={{ paddingVertical: 14, paddingBottom: Math.max(insets.bottom + 85, 110) }}
           >
             {/* Estados Recientes & Vistos */}
             {(() => {
@@ -1396,7 +1394,7 @@ export default function ChatScreen() {
                 tintColor={colors.primary}
               />
             }
-            contentContainerStyle={{ paddingVertical: 8 }}
+            contentContainerStyle={{ paddingVertical: 8, paddingBottom: Math.max(insets.bottom + 85, 110) }}
             ListEmptyComponent={() => (
               <View style={styles.emptyContainer}>
                 <Ionicons name="people-outline" size={44} color={colors.textMuted} />

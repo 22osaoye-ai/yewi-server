@@ -58,3 +58,5 @@ export { UpcomingJobCard, type UpcomingJobCardProps, type UpcomingJobItem, DEFAU
 export { ExclusiveOffersBanner } from './ExclusiveOffersBanner';
 export { ChooseCollectionCarousel } from './ChooseCollectionCarousel';
 export { ScoopedCard, getScoopedCardPath, type ScoopedCardProps } from './ScoopedCard';
+export { Screen, type ScreenProps } from './Screen';
+export { ScreenHeader, type ScreenHeaderProps } from './ScreenHeader';

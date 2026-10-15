@@ -11,6 +11,8 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useRealtimeStore } from '@/store/useRealtimeStore';
+import { useAuthStore } from '@/store/useAuthStore';
+import { useChatStore } from '@/store/useChatStore';
 
 // 1. Home / Inicio Icon (Crisp geometric house)
 function HomeIcon({ color = '#FFFFFF', size = 22 }: { color?: string; size?: number }) {
@@ -56,7 +58,22 @@ function RequestsIcon({ color = '#E4E4E7', size = 22 }: { color?: string; size?:
   );
 }
 
-// 4. Profile / Perfil Icon (User silhouette)
+// 4. Chat / Mensajes Icon (Crisp geometric speech bubble)
+function ChatIcon({ color = '#E4E4E7', size = 22 }: { color?: string; size?: number }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M21 15C21 16.1046 20.1046 17 19 17H7L3 21V5C3 3.89543 3.89543 3 5 3H19C20.1046 3 21 3.89543 21 5V15Z"
+        stroke={color}
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// 5. Profile / Perfil Icon (User silhouette)
 function ProfileIcon({ color = '#E4E4E7', size = 22 }: { color?: string; size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -153,6 +170,18 @@ function CustomTabBar({ state, navigation }: any) {
   const insets = useSafeAreaInsets();
   const { t, isDark } = useAppTheme();
   const unseenLeadsCount = useRealtimeStore((s) => s.unseenLeadsCount);
+  const user = useAuthStore((s) => s.user);
+  const conversations = useChatStore((s) => s.conversations);
+  const activeConversationId = useChatStore((s) => s.activeConversationId);
+
+  const unreadChatCount = React.useMemo(() => {
+    if (!conversations || conversations.length === 0) return 0;
+    const myId = user?.id;
+    return conversations.reduce((acc, c) => {
+      const unread = c.messages?.filter((m) => !m.isRead && m.senderId !== myId).length || 0;
+      return acc + unread;
+    }, 0);
+  }, [conversations, user?.id]);
 
   // Hide bottom tab bar if currently inside a nested sub-screen
   const currentTabRoute = state.routes[state.index];
@@ -164,19 +193,25 @@ function CustomTabBar({ state, navigation }: any) {
     }
   }
 
-  // Proper semantic tab configurations matching the exact 4 tabs of Yewi
+  // Hide bottom tab bar if currently inside an active 1-on-1 chat conversation
+  const currentRoute = state.routes[state.index];
+  if (currentRoute?.name === 'chat' && Boolean(activeConversationId)) {
+    return null;
+  }
+
+  const router = useRouter();
+  if (currentRoute?.name === 'profile' && router.canGoBack()) {
+    return null;
+  }
+
+  // Proper semantic tab configurations matching the 5 tabs of Yewi
   const tabConfigs: Record<string, { label: string; icon: any; badgeCount?: number }> = {
     index: { label: t.tabHome || 'Inicio', icon: HomeIcon },
     search: { label: t.tabSearch || 'Buscar', icon: SearchIcon },
     requests: { label: t.tabRequests || 'Solicitudes', icon: RequestsIcon, badgeCount: unseenLeadsCount },
+    chat: { label: t.tabChat || 'Mensajes', icon: ChatIcon, badgeCount: unreadChatCount },
     profile: { label: t.tabProfile || 'Perfil', icon: ProfileIcon },
   };
-
-  const router = useRouter();
-  const currentRoute = state.routes[state.index];
-  if (currentRoute?.name === 'profile' && router.canGoBack()) {
-    return null;
-  }
 
   return (
     <View
@@ -209,6 +244,10 @@ function CustomTabBar({ state, navigation }: any) {
 
             if (route.name === 'requests') {
               useRealtimeStore.getState().markLeadsAsSeen();
+            }
+
+            if (route.name === 'chat' && isFocused) {
+              useChatStore.getState().setActiveConversationId(null);
             }
 
             if (!isFocused) {
@@ -247,6 +286,7 @@ export default function TabLayout() {
       <Tabs.Screen name="index" />
       <Tabs.Screen name="search" />
       <Tabs.Screen name="requests" />
+      <Tabs.Screen name="chat" />
       <Tabs.Screen name="profile" />
     </Tabs>
   );
@@ -265,9 +305,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    gap: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    gap: 6,
     borderWidth: 1.2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
@@ -276,17 +316,17 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   tabButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
   },
   badgeDotContainer: {
     position: 'absolute',
-    top: 6,
-    right: 6,
+    top: 4,
+    right: 4,
     minWidth: 16,
     height: 16,
     borderRadius: 8,

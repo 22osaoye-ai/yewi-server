@@ -6,6 +6,7 @@ export const translations = {
     tabHome: 'Inicio',
     tabSearch: 'Buscar',
     tabRequests: 'Solicitudes',
+    tabChat: 'Mensajes',
     tabFavorites: 'Guardados',
     tabProfile: 'Perfil',
 
@@ -141,6 +142,7 @@ export const translations = {
     tabHome: 'Home',
     tabSearch: 'Search',
     tabRequests: 'Requests',
+    tabChat: 'Messages',
     tabFavorites: 'Saved',
     tabProfile: 'Profile',
 
