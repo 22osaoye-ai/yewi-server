@@ -66,20 +66,25 @@ export class ProfessionalsService {
   async updateMyProfile(userId: string, dto: UpdateProfessionalProfileDto) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { professionalProfile: true },
+      include: { professionalProfile: true, profile: true },
     });
 
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
     }
 
+    const userFullName =
+      user.profile?.displayName ||
+      [user.profile?.firstName, user.profile?.lastName].filter(Boolean).join(' ') ||
+      undefined;
+
     const bioText =
       dto.bio !== undefined
         ? dto.bio.trim()
         : dto.businessName
           ? `Servicios profesionales de ${dto.businessName.trim()}`
-          : (user as any).fullName
-            ? `Servicios profesionales de ${(user as any).fullName.trim()}`
+          : userFullName
+            ? `Servicios profesionales de ${userFullName.trim()}`
             : undefined;
 
     if (!user.professionalProfile && !bioText) {

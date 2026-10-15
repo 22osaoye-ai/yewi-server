@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  OnModuleInit,
   Optional,
   forwardRef,
 } from '@nestjs/common';
@@ -16,6 +17,7 @@ import {
   OrderType,
   TransactionStatus,
   TransactionType,
+  UserRole,
 } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { RealtimeService } from '../../common/realtime/realtime.service';
@@ -30,7 +32,7 @@ import {
 import { PaymentsService } from '../payments/payments.service';
 
 @Injectable()
-export class OrdersService {
+export class OrdersService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => PaymentsService))
@@ -38,6 +40,46 @@ export class OrdersService {
     @Optional() private readonly realtime?: RealtimeService,
     @Optional() private readonly configService?: ConfigService,
   ) {}
+
+  onModuleInit() {
+    // Verificación periódica de auto-completado para órdenes entregadas (cada hora)
+    const interval = setInterval(() => {
+      this.autoCompleteDeliveredOrders().catch(() => {});
+    }, 3600000);
+    if (typeof interval.unref === 'function') {
+      interval.unref();
+    }
+  }
+
+  /**
+   * Auto-completar pedidos entregados que superaron el plazo de AUTO_COMPLETE_ORDER_DAYS
+   */
+  async autoCompleteDeliveredOrders(): Promise<number> {
+    const days = Number(
+      this.configService?.get('AUTO_COMPLETE_ORDER_DAYS') ?? 3,
+    );
+    const threshold = new Date();
+    threshold.setDate(threshold.getDate() - days);
+
+    const eligibleOrders = await this.prisma.order.findMany({
+      where: {
+        status: OrderStatus.DELIVERED,
+        updatedAt: { lte: threshold },
+      },
+      select: { id: true, clientId: true },
+    });
+
+    let completedCount = 0;
+    for (const order of eligibleOrders) {
+      try {
+        await this.approveDelivery(order.clientId, order.id);
+        completedCount++;
+      } catch {
+        // Ignorar fallos individuales para no bloquear el lote
+      }
+    }
+    return completedCount;
+  }
 
   /**
    * Crear un nuevo pedido a partir de un paquete de Gig (Fiverr Style)
@@ -502,7 +544,25 @@ export class OrdersService {
       !!requirementsAnswers && Object.keys(requirementsAnswers).length > 0;
 
     const result = await this.prisma.$transaction(async (tx) => {
-      // 1. Registrar transacción en el libro mayor con el ID de Stripe real
+      // 1. Asentar entrada contable de fondos externos vía Stripe Checkout
+      await tx.ledgerTransaction.create({
+        data: {
+          walletId: clientWallet.id,
+          type: TransactionType.DEPOSIT,
+          amount: totalAmount,
+          currency: 'EUR',
+          status: TransactionStatus.COMPLETED,
+          stripePaymentIntentId: paymentIntentId ?? null,
+          metadata: {
+            orderNumber,
+            sessionId,
+            stripePaymentIntentId: paymentIntentId ?? null,
+            action: 'STRIPE_CARD_DEPOSIT',
+          },
+        },
+      });
+
+      // 2. Registrar retención de orden en el libro mayor (Escrow HELD)
       const ledgerTx = await tx.ledgerTransaction.create({
         data: {
           walletId: clientWallet.id,
@@ -642,9 +702,12 @@ export class OrdersService {
       );
     }
 
-    const deliveryNumber = order.deliveries.length + 1;
-
     const result = await this.prisma.$transaction(async (tx) => {
+      const deliveryCount = tx.orderDelivery?.count
+        ? await tx.orderDelivery.count({ where: { orderId } })
+        : (order.deliveries?.length ?? 0);
+      const deliveryNumber = deliveryCount + 1;
+
       const delivery = await tx.orderDelivery.create({
         data: {
           orderId,
@@ -794,6 +857,41 @@ export class OrdersService {
             },
           },
         });
+
+        // 3b. Registrar recaudación contable de la comisión de plataforma (15%)
+        if (Number(order.platformFee) > 0) {
+          const platformWallet = tx.wallet?.findFirst
+            ? await tx.wallet.findFirst({
+                where: { user: { roles: { has: UserRole.ADMIN } } },
+              })
+            : null;
+
+          if (platformWallet) {
+            await tx.wallet.update({
+              where: { id: platformWallet.id },
+              data: {
+                fiatAvailableBalance: { increment: Number(order.platformFee) },
+              },
+            });
+          }
+
+          await tx.ledgerTransaction.create({
+            data: {
+              walletId: platformWallet ? platformWallet.id : proUser.wallet.id,
+              type: TransactionType.PLATFORM_FEE,
+              amount: Number(order.platformFee),
+              currency: 'EUR',
+              status: TransactionStatus.COMPLETED,
+              referenceId: order.id,
+              metadata: {
+                orderNumber: order.orderNumber,
+                totalAmount: Number(order.totalAmount),
+                platformFee: Number(order.platformFee),
+                action: 'PLATFORM_COMMISSION_RETAINED',
+              },
+            },
+          });
+        }
       }
 
       // 4. Actualizar métricas del profesional

@@ -926,8 +926,8 @@ export class AuthService {
             displayName: `${firstName} ${lastName}`,
             phoneNumber: cleanPhone,
             phoneVerified: true,
-            city: 'Zaragoza',
-            postalCode: '50001',
+            city: null,
+            postalCode: null,
           },
         });
 
@@ -936,10 +936,10 @@ export class AuthService {
             data: {
               userId: newUser.id,
               businessName: `${firstName} ${lastName}`,
-              bio: 'Profesional verificado por teléfono en Yewi',
-              city: 'Zaragoza',
-              postalCode: '50001',
-              hourlyRate: 35,
+              bio: '',
+              city: null,
+              postalCode: null,
+              hourlyRate: null,
               serviceRadiusKm: 50,
             },
           });

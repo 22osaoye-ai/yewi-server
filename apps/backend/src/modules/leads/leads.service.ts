@@ -306,8 +306,7 @@ export class LeadsService {
     });
 
     const formatted = requests.map((req) => {
-      // Oportunidad visible para cotizar libremente
-      const isUnlocked = true;
+      const isUnlocked = Boolean(req.unlocks && req.unlocks.length > 0);
       let distanceKm: number | null = null;
 
       if (pro.latitude && pro.longitude && req.latitude && req.longitude) {
@@ -347,9 +346,13 @@ export class LeadsService {
           name:
             `${req.client.profile?.firstName ?? ''} ${req.client.profile?.lastName ?? ''}`.trim() ||
             'Cliente Yewi',
-          email: req.client.email,
-          phone: req.client.profile?.phoneNumber || 'Disponible tras presupuesto',
-          address: req.address || `${req.city} (${req.postalCode})`,
+          email: isUnlocked ? req.client.email : undefined,
+          phone: isUnlocked
+            ? (req.client.profile?.phoneNumber || 'No especificado')
+            : 'Disponible tras contacto directo',
+          address: isUnlocked
+            ? (req.address || `${req.city} (${req.postalCode})`)
+            : `${req.city} (${req.postalCode})`,
         },
       };
     });
@@ -1201,7 +1204,25 @@ export class LeadsService {
     }
 
     const result = await this.prisma.$transaction(async (tx) => {
-      // 1. Registrar transacción en el libro mayor con el ID de Stripe real
+      // 1. Asentar entrada contable de fondos externos vía Stripe Checkout
+      await tx.ledgerTransaction.create({
+        data: {
+          walletId: clientWallet.id,
+          type: TransactionType.DEPOSIT,
+          amount: totalAmount,
+          currency: 'EUR',
+          status: TransactionStatus.COMPLETED,
+          stripePaymentIntentId: paymentIntentId ?? null,
+          metadata: {
+            orderNumber,
+            sessionId,
+            stripePaymentIntentId: paymentIntentId ?? null,
+            action: 'STRIPE_CARD_DEPOSIT',
+          },
+        },
+      });
+
+      // 2. Registrar transacción de retención en el libro mayor (Escrow HELD)
       const ledgerTx = await tx.ledgerTransaction.create({
         data: {
           walletId: clientWallet.id,

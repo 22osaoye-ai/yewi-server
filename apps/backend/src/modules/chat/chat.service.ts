@@ -2,8 +2,11 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { NotificationType } from '@prisma/client';
 import { StreamChat } from 'stream-chat';
 import { AntiFraudUtils } from '../../common/utils/anti-fraud.utils';
 import { RealtimeService } from '../../common/realtime/realtime.service';
@@ -12,6 +15,8 @@ import { SendMessageDto } from './dto/send-message.dto';
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger(ChatService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtimeService: RealtimeService,
@@ -563,7 +568,7 @@ export class ChatService {
         const notif = await this.prisma.notification.create({
           data: {
             userId: recipientId,
-            type: 'SYSTEM_ALERT',
+            type: NotificationType.SYSTEM_ALERT,
             title: `💬 Mensaje de ${senderName}`,
             message:
               content.length > 100 ? `${content.slice(0, 97)}...` : content,
@@ -642,7 +647,13 @@ export class ChatService {
           // Ignorado en caso de modo offline/dev
         });
     } catch (err) {
-      token = `stream_token_${userId}`;
+      this.logger.error(
+        `Error al generar token de Stream Chat para ${userId}:`,
+        err,
+      );
+      throw new ServiceUnavailableException(
+        'No se pudo generar el token de chat en este momento',
+      );
     }
 
     return {
@@ -885,7 +896,7 @@ export class ChatService {
         const notif = await this.prisma.notification.create({
           data: {
             userId: recipientId,
-            type: 'SYSTEM_ALERT',
+            type: NotificationType.SYSTEM_ALERT,
             title: `${emoji} ${userName} reaccionó a tu mensaje`,
             message: `"${message.content.length > 50 ? message.content.slice(0, 47) + '...' : message.content}"`,
             link: `/chat?conversationId=${message.conversationId}`,
