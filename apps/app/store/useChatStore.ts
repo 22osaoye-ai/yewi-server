@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   chatApi,
   ChatMessage,
@@ -10,6 +12,9 @@ import { statusesApi, AuthorStatusFeedGroup } from '@/services/statusesApi';
 import { realtimeService } from '@/services/realtimeService';
 import { useFavoritesStore } from './useFavoritesStore';
 import { useAuthStore } from './useAuthStore';
+
+const STORAGE_CONVERSATIONS = '@yewi_cached_conversations';
+const STORAGE_CONTACTS = '@yewi_cached_contacts';
 
 interface ConversationCacheItem {
   detail: ConversationDetail;
@@ -43,6 +48,7 @@ interface ChatState {
   lastContactsFetchedAt: number;
 
   // Actions
+  initializeChatCache: () => Promise<void>;
   fetchConversations: (force?: boolean) => Promise<void>;
   fetchStories: (force?: boolean) => Promise<void>;
   fetchContacts: (force?: boolean) => Promise<void>;
@@ -92,9 +98,41 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ activeConversationId });
   },
 
+  // 0. Initialize Cache from local disk (0ms instant display on boot)
+  initializeChatCache: async () => {
+    try {
+      const [cachedConvs, cachedContacts] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_CONVERSATIONS),
+        AsyncStorage.getItem(STORAGE_CONTACTS),
+      ]);
+      const updates: Partial<ChatState> = {};
+      if (cachedConvs) {
+        try {
+          const parsed = JSON.parse(cachedConvs);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            updates.conversations = parsed;
+          }
+        } catch {}
+      }
+      if (cachedContacts) {
+        try {
+          const parsed = JSON.parse(cachedContacts);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            updates.contacts = parsed;
+          }
+        } catch {}
+      }
+      if (Object.keys(updates).length > 0) {
+        set(updates);
+      }
+    } catch (e) {
+      console.warn('[useChatStore] Error reading local chat cache:', e);
+    }
+  },
+
   // 1. Fetch Conversations (Cache-First / SWR)
   fetchConversations: async (force = false) => {
-    const { conversations, lastConversationsFetchedAt, isConversationsLoading } = get();
+    const { conversations, lastConversationsFetchedAt } = get();
     const isStale = Date.now() - lastConversationsFetchedAt > CACHE_TTL_MS;
 
     // If cache is fresh and not forced, reuse cache (0 ms response)
@@ -115,6 +153,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         lastConversationsFetchedAt: Date.now(),
         isConversationsLoading: false,
       });
+      AsyncStorage.setItem(STORAGE_CONVERSATIONS, JSON.stringify(list)).catch(() => {});
     } catch (err) {
       console.warn('[useChatStore] Error fetching conversations:', err);
       set({ isConversationsLoading: false });
@@ -163,11 +202,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     try {
       const data = await chatApi.getContacts();
+      const list = Array.isArray(data) ? data : [];
       set({
-        contacts: Array.isArray(data) ? data : [],
+        contacts: list,
         lastContactsFetchedAt: Date.now(),
         isContactsLoading: false,
       });
+      AsyncStorage.setItem(STORAGE_CONTACTS, JSON.stringify(list)).catch(() => {});
     } catch (err) {
       console.warn('[useChatStore] Error fetching contacts:', err);
       set({ isContactsLoading: false });
@@ -513,3 +554,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isObserverInitialized: false });
   },
 }));
+
+// Run chat cache initialization on boot (guarded for SSR)
+if (Platform.OS !== 'web' || typeof window !== 'undefined') {
+  useChatStore.getState().initializeChatCache();
+}
+

@@ -95,3 +95,12 @@ yewi/
    - Prohibido reestructurar módulos o cambiar formatos de respuesta de endpoints no involucrados en la tarea.
 4. **No crear capas intermedias vacías**:
    - Prohibido añadir repositorios abstractos, interfaces de implementación única o adaptadores innecesarios.
+5. **Preservar el Flujo de Google OAuth & Clerk**:
+   - Prohibido alterar `startSSOFlow` en `apps/app/app/auth/login.tsx` sin usar `redirectUrl: AuthSession.makeRedirectUri({ path: 'sso-callback' })` (garantiza compatibilidad en Expo Go con `exp://` y en compilaciones de producción con `yewiapp://`).
+   - Prohibido eliminar la resolución de session ID múltiple (`createdSessionId ?? signIn?.createdSessionId ?? signUp?.createdSessionId`) o la navegación inmediata a `/(tabs)`.
+   - Prohibido reintroducir guardas que bloqueen `ClerkAuthSync` cuando `isAuthenticated` en Zustand sea `false`.
+6. **Preservar Dependencias Circulares con `forwardRef` en NestJS**:
+   - Entre `OrdersModule`, `PaymentsModule`, `WalletModule` y `LeadsModule`, es mandatorio mantener `forwardRef()` tanto en `@Module.imports` como en constructores con `@Inject(forwardRef())`.
+7. **Respetar Enums y Modelos de Prisma**:
+   - Prohibido inventar valores de enums como `OrderStatus.IN_DELIVERY` o tipos de transacción inexistentes.
+   - Prohibido consultar relaciones que no existan en el modelo (ej. `Order` no tiene relación `ledgerTransactions`).

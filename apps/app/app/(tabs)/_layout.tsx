@@ -199,11 +199,6 @@ function CustomTabBar({ state, navigation }: any) {
     return null;
   }
 
-  const router = useRouter();
-  if (currentRoute?.name === 'profile' && router.canGoBack()) {
-    return null;
-  }
-
   // Proper semantic tab configurations matching the 5 tabs of Yewi
   const tabConfigs: Record<string, { label: string; icon: any; badgeCount?: number }> = {
     index: { label: t.tabHome || 'Inicio', icon: HomeIcon },
@@ -250,8 +245,14 @@ function CustomTabBar({ state, navigation }: any) {
               useChatStore.getState().setActiveConversationId(null);
             }
 
-            if (!isFocused) {
-              navigation.navigate(route.name);
+            const event = navigation.emit({
+              type: 'tabPress',
+              target: route.key,
+              canPreventDefault: true,
+            });
+
+            if (!isFocused && !event.defaultPrevented) {
+              navigation.navigate({ name: route.name, merge: true });
             }
           };
 
@@ -276,10 +277,10 @@ function CustomTabBar({ state, navigation }: any) {
 export default function TabLayout() {
   return (
     <Tabs
-      backBehavior="history"
+      backBehavior="initialRoute"
       screenOptions={{
         headerShown: false,
-        freezeOnBlur: true,
+        freezeOnBlur: false,
       }}
       tabBar={(props) => <CustomTabBar {...props} />}
     >

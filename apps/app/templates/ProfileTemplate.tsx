@@ -136,12 +136,6 @@ export function ProfileTemplate() {
   const [isPro, setIsPro] = useState<boolean>(isProfessional);
   const [isCheckingPro, setIsCheckingPro] = useState<boolean>(false);
 
-  useEffect(() => {
-    if (!isAuthenticated || !user) {
-      router.replace('/auth/login');
-    }
-  }, [isAuthenticated, user, router]);
-
   // Reanimated scroll shared value for sticky animated header
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler({
@@ -268,8 +262,10 @@ export function ProfileTemplate() {
   }, []);
 
   useEffect(() => {
-    fetchMyProjects();
-  }, [fetchMyProjects]);
+    if (isProfessional) {
+      fetchMyProjects();
+    }
+  }, [isProfessional, fetchMyProjects]);
 
   const displayProjects = myProjects;
 

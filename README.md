@@ -1,99 +1,104 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# 🛠️ Yewi — Plataforma de Servicios y Profesionales para el Hogar
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Ecosistema monorepo de **Yewi**, el marketplace de servicios para el hogar y profesionales de confianza en España (reformas, electricidad, fontanería, pintura, climatización, etc.).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## 🏗️ Arquitectura del Monorepo
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Gestionado con **pnpm workspaces**:
 
-## Project setup
+```text
+yewi/
+├── apps/
+│   ├── backend/        # API REST y WebSocket (NestJS 11 + Prisma ORM 7 + PostgreSQL + Redis)
+│   └── app/            # App Móvil Multiplataforma (Expo SDK 54 + React Native 0.86)
+├── .agents/            # Protocolos de Gobernanza, SSD, Skills y Arquitectura
+├── design-system/      # Tokens y especificaciones de diseño
+└── package.json        # Configuración de workspaces y scripts raíz
+```
+
+---
+
+## 🛡️ ZONAS CRÍTICAS E INMUTABLES (LO QUE NUNCA SE DEBE VOLVER A TOCAR)
+
+Esta sección documenta componentes y patrones que **ya funcionan correctamente y que bajo ninguna circunstancia deben alterarse**, ya que cualquier modificación rompe el despliegue en producción o el inicio de sesión de los usuarios.
+
+### 1. Autenticación Google OAuth & Sincronización Clerk (`apps/app`)
+* **`startSSOFlow` en `apps/app/app/auth/login.tsx`**:
+  - **DEBE** utilizar `redirectUrl: AuthSession.makeRedirectUri({ path: 'sso-callback' })`. NO forzar `{ scheme: 'yewiapp' }` de manera rígida porque rompe la compatibilidad en Expo Go (donde el esquema del emulador es `exp://`). `makeRedirectUri` resuelve automáticamente tanto Expo Go como builds nativas de producción.
+  - **DEBE** extraer el session ID considerando todas las posibles respuestas de Clerk:
+    ```typescript
+    const sessionId = res.createdSessionId ?? res.signIn?.createdSessionId ?? res.signUp?.createdSessionId;
+    ```
+  - **DEBE** navegar de forma inmediata (`router.replace('/(tabs)')`) tras `setActive`, sin esperar eventos asíncronos adicionales.
+  - Si ocurre el error `session_already_exists` o `already signed`, **DEBE** sincronizar al usuario con `useAuthStore` y navegar a `/(tabs)` en lugar de terminar silenciosamente.
+* **Guarda de sincronización en `apps/app/components/auth/ClerkAuthSync.tsx`**:
+  - **PROHIBIDO** abortar la sincronización si `useAuthStore.getState().isAuthenticated` es `false`.
+  - La comprobación `now - moduleLastSyncTime < 30000` solo debe ejecutarse cuando el usuario **ya esté autenticado** en el store global. Si no está autenticado, **siempre debe proceder a sincronizar**.
+  - `getToken()` debe contar con un timeout protector (`Promise.race`) para evitar bloqueos indefinidos ante red lenta.
+* **Pantalla de callback `apps/app/app/sso-callback.tsx`**:
+  - Si `isSignedIn` es `true`, **DEBE** navegar a `/(tabs)`. Prohibido dejar la pantalla colgada en un `ActivityIndicator` infinito.
+
+### 2. Dependencias Circulares e Inyección en NestJS (`apps/backend`)
+* **Módulos `OrdersModule`, `PaymentsModule`, `WalletModule` y `LeadsModule`**:
+  - Al existir dependencias circulares entre estos módulos (órdenes que procesan pagos y pagos que materializan o reembolsan órdenes):
+    1. **Ambos módulos** deben usar `forwardRef()` en sus imports:
+       ```typescript
+       @Module({
+         imports: [forwardRef(() => PaymentsModule)],
+       })
+       ```
+    2. **Los servicios correspondientes** deben inyectar la dependencia con `@Inject(forwardRef(() => ...))`:
+       ```typescript
+       constructor(
+         @Inject(forwardRef(() => PaymentsService))
+         private readonly paymentsService: PaymentsService,
+       ) {}
+       ```
+  - Omitir `forwardRef` en cualquiera de los dos lados provoca la excepción crítica **`UndefinedModuleException`** que impide el arranque del backend en Render / producción.
+
+### 3. Esquema de Base de Datos y Enums Oficiales de Prisma (`schema.prisma`)
+* **`OrderStatus`**:
+  - Los únicos valores válidos del enum son: `PENDING_REQUIREMENTS`, `IN_PROGRESS`, `DELIVERED`, `REVISION_REQUESTED`, `COMPLETED`, `CANCELLED`, `DISPUTED`.
+  - **PROHIBIDO** inventar estados como `IN_DELIVERY`. El trabajo en revisión se modela con `DELIVERED` y `REVISION_REQUESTED`.
+* **`TransactionType`**:
+  - Los valores válidos son: `CREDIT_PURCHASE`, `LEAD_UNLOCK`, `LEAD_REFUND`, `ORDER_PAYMENT`, `ESCROW_RELEASE`, `PLATFORM_FEE`, `PAYOUT_WITHDRAWAL`, `ORDER_REFUND`, `DEPOSIT`.
+  - Si se utiliza un tipo de transacción en el código, **debe existir previamente en el `schema.prisma` y en el tipo enum de PostgreSQL**.
+* **Relaciones reales en modelos**:
+  - `Order` **NO** tiene una relación directa `ledgerTransactions`. Las transacciones contables en `LedgerTransaction` se asocian al pedido mediante el campo `referenceId: order.id`. Prohibido consultar `{ ledgerTransactions: { some: ... } }` dentro de `prisma.order`.
+
+### 4. Modelo de Negocio e Integridad Transaccional
+* **Custodia Escrow al 100% y Comisión del 15%**:
+  - Al crearse un pedido desde presupuesto o gig, el estado de custodia inicial es estrictamente `EscrowStatus.HELD`.
+  - La comisión de plataforma es del **15%** (`platformFee = round(price * 0.15)`) y el **85%** restante son los ingresos garantizados del profesional (`proEarnings`).
+  - La liberación de fondos (`RELEASED_TO_PRO`) o reembolsos (`ORDER_REFUND`) debe ejecutarse exclusivamente en transacciones atómicas `prisma.$transaction`.
+
+---
+
+## 🚀 Comandos de Desarrollo
 
 ```bash
+# Instalar dependencias en todo el monorepo
 $ pnpm install
+
+# Levantar backend en desarrollo (NestJS watch mode)
+$ pnpm dev:backend
+
+# Levantar app móvil (Expo Metro bundler)
+$ pnpm dev:app
+
+# Compilar backend para producción (Prisma generate + Nest build)
+$ pnpm build
+
+# Ejecutar tests del backend
+$ pnpm test:backend
 ```
 
-## Compile and run the project
+---
 
-```bash
-# development
-$ pnpm run start
+## 🔒 Reglas de Contribución para Agentes y Desarrolladores
 
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
-```
-
-## Run tests
-
-```bash
-# unit tests
-$ pnpm run test
-
-# e2e tests
-$ pnpm run test:e2e
-
-# test coverage
-$ pnpm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
-
+1. **Cero Datos Ficticios**: Prohibido introducir mocks, tokens `pi_mock_...` o datos ficticios en flujos de producción.
+2. **Cambio Mínimo y Quirúrgico**: Modificar únicamente los archivos estrictamente relacionados con el problema o tarea actual.
+3. **Validación Pre-Push**: Todo cambio antes de hacer `git push` debe compilar limpiamente con `pnpm build` y pasar la suite de tests con `pnpm test:backend`.

@@ -262,8 +262,6 @@ export function RequestsTemplate() {
   const { width: SCREEN_WIDTH } = useWindowDimensions();
   const { colors, t, isDark } = useAppTheme();
   const { user, isAuthenticated, isProfessional } = useUserRole();
-  const realtimeLeads = useRealtimeStore((state) => state.availableLeads);
-  const unseenLeadsCount = useRealtimeStore((state) => state.unseenLeadsCount);
   const params = useLocalSearchParams<{ create?: string }>();
 
   // Synchronous role state derived from useUserRole (Escrow model)
@@ -273,32 +271,24 @@ export function RequestsTemplate() {
     setIsPro(isProfessional);
   }, [isProfessional]);
 
-  // Tab State: professionals receive requests ('leads') by default; clients view 'my-requests'
-  const [activeTab, setActiveTab] = useState<'my-requests' | 'leads' | 'my-proposals'>(
-    isProfessional ? 'leads' : 'my-requests'
+  // Tab State: professionals only have 'my-proposals'; clients have 'my-requests' and 'my-proposals'
+  const [activeTab, setActiveTab] = useState<'my-requests' | 'my-proposals'>(
+    isProfessional ? 'my-proposals' : 'my-requests'
   );
   const [proposalFilter, setProposalFilter] = useState<'ALL' | 'ACCEPTED' | 'PENDING' | 'REJECTED'>('ALL');
 
   useEffect(() => {
-    if (isProfessional && activeTab === 'my-requests') {
-      setActiveTab('leads');
+    if (isProfessional && activeTab !== 'my-proposals') {
+      setActiveTab('my-proposals');
     }
   }, [isProfessional, activeTab]);
 
   const [myRequests, setMyRequests] = useState<ServiceRequestItem[]>([]);
-  const [availableLeads, setAvailableLeads] = useState<ServiceRequestItem[]>([]);
   const [myProposals, setMyProposals] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
-
-  // Security: If not authenticated, immediately redirect away from requests
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.replace('/auth/login');
-    }
-  }, [isAuthenticated, router]);
 
   useEffect(() => {
     if (params.create === 'true') {
@@ -337,9 +327,6 @@ export function RequestsTemplate() {
           setMyRequests(valid);
           await AsyncStorage.setItem(STORAGE_MY_REQUESTS, JSON.stringify(valid));
         }
-      } else if (activeTab === 'leads') {
-        const data = await leadsApi.getAvailableLeads();
-        setAvailableLeads(Array.isArray(data) ? data : []);
       } else if (activeTab === 'my-proposals') {
         const data = await leadsApi.getMyProposals();
         setMyProposals(Array.isArray(data) ? data : []);
@@ -363,8 +350,6 @@ export function RequestsTemplate() {
         }
       } else if (activeTab === 'my-proposals') {
         setMyProposals([]);
-      } else {
-        setAvailableLeads([]);
       }
     } finally {
       setIsLoading(false);
@@ -391,19 +376,12 @@ export function RequestsTemplate() {
   useEffect(() => {
     if (
       (activeTab === 'my-requests' && myRequests.length === 0) ||
-      (activeTab === 'leads' && availableLeads.length === 0) ||
       (activeTab === 'my-proposals' && myProposals.length === 0)
     ) {
       setIsLoading(true);
     }
     loadData();
   }, [loadData, activeTab]);
-
-  useEffect(() => {
-    if (activeTab === 'leads' && realtimeLeads.length > 0) {
-      setAvailableLeads(realtimeLeads);
-    }
-  }, [activeTab, realtimeLeads]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -445,10 +423,6 @@ export function RequestsTemplate() {
     activeTab === 'my-requests'
       ? Array.isArray(myRequests)
         ? myRequests
-        : []
-      : activeTab === 'leads'
-      ? Array.isArray(availableLeads)
-        ? availableLeads
         : []
       : filteredProposals;
 
@@ -560,106 +534,51 @@ export function RequestsTemplate() {
             contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20 }}
           >
             {isProfessional ? (
-              <>
-                {/* Pro Tab 1: Recibidas */}
-                <ThemedTouchable
-                  onPress={() => {
-                    setActiveTab('leads');
-                    useRealtimeStore.getState().markLeadsAsSeen();
-                    Haptics.selectionAsync().catch(() => {});
-                  }}
-                  haptic="selection"
-                  className="pb-3 pt-1 mr-6 relative"
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                    <Text
-                      style={{
-                        fontSize: 15.5,
-                        fontFamily: activeTab === 'leads' ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-Bold',
-                        color: activeTab === 'leads' ? colors.textPrimary : colors.textMuted,
-                      }}
-                    >
-                      Recibidas
-                    </Text>
-                    {unseenLeadsCount > 0 && (
-                      <View
-                        style={{
-                          backgroundColor: '#EF4444',
-                          borderRadius: 10,
-                          paddingHorizontal: 6,
-                          paddingVertical: 1,
-                        }}
-                      >
-                        <Text style={{ fontSize: 10, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#FFFFFF' }}>
-                          {unseenLeadsCount > 99 ? '99+' : unseenLeadsCount}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  {activeTab === 'leads' && (
+              <ThemedTouchable
+                onPress={() => {
+                  setActiveTab('my-proposals');
+                  Haptics.selectionAsync().catch(() => {});
+                }}
+                haptic="selection"
+                className="pb-3 pt-1 mr-6 relative"
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Text
+                    style={{
+                      fontSize: 15.5,
+                      fontFamily: 'PlusJakartaSans-ExtraBold',
+                      color: colors.textPrimary,
+                    }}
+                  >
+                    Presupuestos
+                  </Text>
+                  {((myProposals.length > 0 ? myProposals : SAMPLE_PROPOSALS).filter((p) => p.status === 'ACCEPTED').length > 0) && (
                     <View
                       style={{
-                        position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        height: 2.5,
-                        borderRadius: 2,
-                        backgroundColor: colors.textPrimary,
-                      }}
-                    />
-                  )}
-                </ThemedTouchable>
-
-                {/* Pro Tab 2: Presupuestos */}
-                <ThemedTouchable
-                  onPress={() => {
-                    setActiveTab('my-proposals');
-                    Haptics.selectionAsync().catch(() => {});
-                  }}
-                  haptic="selection"
-                  className="pb-3 pt-1 mr-6 relative"
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Text
-                      style={{
-                        fontSize: 15.5,
-                        fontFamily: activeTab === 'my-proposals' ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-Bold',
-                        color: activeTab === 'my-proposals' ? colors.textPrimary : colors.textMuted,
+                        backgroundColor: '#10B981',
+                        borderRadius: 10,
+                        paddingHorizontal: 6,
+                        paddingVertical: 1,
                       }}
                     >
-                      Presupuestos
-                    </Text>
-                    {((myProposals.length > 0 ? myProposals : SAMPLE_PROPOSALS).filter((p) => p.status === 'ACCEPTED').length > 0) && (
-                      <View
-                        style={{
-                          backgroundColor: '#10B981',
-                          borderRadius: 10,
-                          paddingHorizontal: 6,
-                          paddingVertical: 1,
-                        }}
-                      >
-                        <Text style={{ fontSize: 10, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#FFFFFF' }}>
-                          {(myProposals.length > 0 ? myProposals : SAMPLE_PROPOSALS).filter((p) => p.status === 'ACCEPTED').length}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  {activeTab === 'my-proposals' && (
-                    <View
-                      style={{
-                        position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        height: 2.5,
-                        borderRadius: 2,
-                        backgroundColor: colors.textPrimary,
-                      }}
-                    />
+                      <Text style={{ fontSize: 10, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#FFFFFF' }}>
+                        {(myProposals.length > 0 ? myProposals : SAMPLE_PROPOSALS).filter((p) => p.status === 'ACCEPTED').length}
+                      </Text>
+                    </View>
                   )}
-                </ThemedTouchable>
-              </>
+                </View>
+                <View
+                  style={{
+                    position: 'absolute',
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 2.5,
+                    borderRadius: 2,
+                    backgroundColor: colors.textPrimary,
+                  }}
+                />
+              </ThemedTouchable>
             ) : (
               <>
                 {/* Client Tab 1: Mis Solicitudes */}
@@ -695,57 +614,7 @@ export function RequestsTemplate() {
                   )}
                 </ThemedTouchable>
 
-                {/* Client Tab 2: Disponibles */}
-                <ThemedTouchable
-                  onPress={() => {
-                    setActiveTab('leads');
-                    useRealtimeStore.getState().markLeadsAsSeen();
-                    Haptics.selectionAsync().catch(() => {});
-                  }}
-                  haptic="selection"
-                  className="pb-3 pt-1 mr-6 relative"
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-                    <Text
-                      style={{
-                        fontSize: 15.5,
-                        fontFamily: activeTab === 'leads' ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-Bold',
-                        color: activeTab === 'leads' ? colors.textPrimary : colors.textMuted,
-                      }}
-                    >
-                      Disponibles
-                    </Text>
-                    {unseenLeadsCount > 0 && (
-                      <View
-                        style={{
-                          backgroundColor: '#EF4444',
-                          borderRadius: 10,
-                          paddingHorizontal: 6,
-                          paddingVertical: 1,
-                        }}
-                      >
-                        <Text style={{ fontSize: 10, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#FFFFFF' }}>
-                          {unseenLeadsCount > 99 ? '99+' : unseenLeadsCount}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                  {activeTab === 'leads' && (
-                    <View
-                      style={{
-                        position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        height: 2.5,
-                        borderRadius: 2,
-                        backgroundColor: colors.textPrimary,
-                      }}
-                    />
-                  )}
-                </ThemedTouchable>
-
-                {/* Client Tab 3: Presupuestos */}
+                {/* Client Tab 2: Presupuestos */}
                 <ThemedTouchable
                   onPress={() => {
                     setActiveTab('my-proposals');
@@ -877,58 +746,7 @@ export function RequestsTemplate() {
             paddingBottom: Math.max(insets.bottom + 120, 140),
             flexGrow: 1,
           }}
-          ListHeaderComponent={
-            activeTab === 'leads' ? (
-              <View key="leads-escrow-header" style={{ marginBottom: 14 }}>
-                <View
-                  style={{
-                    backgroundColor: isDark ? 'rgba(5, 150, 105, 0.12)' : 'rgba(5, 150, 105, 0.08)',
-                    borderColor: isDark ? 'rgba(5, 150, 105, 0.28)' : 'rgba(5, 150, 105, 0.22)',
-                    borderWidth: 1,
-                    borderRadius: 16,
-                    padding: 14,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 12,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      backgroundColor: '#059669',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    <Ionicons name="shield-checkmark" size={18} color="#FFFFFF" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text
-                      style={{
-                        fontSize: 13.5,
-                        fontFamily: 'PlusJakartaSans-Bold',
-                        color: isDark ? '#34D399' : '#065F46',
-                      }}
-                    >
-                      Presupuestos Libres y Cobro Seguro
-                    </Text>
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontFamily: 'PlusJakartaSans-Medium',
-                        color: colors.textSecondary,
-                        marginTop: 2,
-                      }}
-                    >
-                      Envía ofertas gratis. Fondos custodiados en Escrow con 15% de comisión solo al finalizar.
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            ) : null
-          }
+          ListHeaderComponent={null}
 
           ListEmptyComponent={() => (
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 40, paddingHorizontal: 16 }}>
@@ -947,9 +765,7 @@ export function RequestsTemplate() {
                   name={
                     activeTab === 'my-requests'
                       ? 'document-text-outline'
-                      : activeTab === 'my-proposals'
-                      ? 'pricetags-outline'
-                      : 'sparkles-outline'
+                      : 'pricetags-outline'
                   }
                   size={38}
                   color={colors.primary}
@@ -958,9 +774,7 @@ export function RequestsTemplate() {
               <Text style={{ fontSize: 18, fontFamily: 'PlusJakartaSans-ExtraBold', color: colors.textPrimary, marginBottom: 8, textAlign: 'center' }}>
                 {activeTab === 'my-requests'
                   ? t.noRequestsTitle
-                  : activeTab === 'my-proposals'
-                  ? 'No hay presupuestos en esta sección'
-                  : t.noLeadsTitle}
+                  : 'No hay presupuestos'}
               </Text>
               <Text
                 style={{
@@ -975,9 +789,7 @@ export function RequestsTemplate() {
               >
                 {activeTab === 'my-requests'
                   ? t.noRequestsDesc
-                  : activeTab === 'my-proposals'
-                  ? 'Cuando envíes propuestas a solicitudes de clientes, aparecerán aquí para su seguimiento y chat privado.'
-                  : t.noLeadsDesc}
+                  : 'Cuando envíes o recibas propuestas para proyectos, aparecerán aquí para su seguimiento y chat privado.'}
               </Text>
               {activeTab === 'my-requests' && !isProfessional && (
                 <Button
@@ -1278,15 +1090,11 @@ export function RequestsTemplate() {
               ? `${item.budgetMax}€`
               : item.budgetEstimated
               ? `${item.budgetEstimated}€`
-              : activeTab === 'my-requests'
-              ? `${item.proposals?.length || 0}`
-              : 'A convenir';
+              : `${item.proposals?.length || 0}`;
 
             const countLabel = item.budgetMax || item.budgetEstimated
               ? 'presupuesto'
-              : activeTab === 'my-requests'
-              ? 'presupuestos'
-              : 'orientativo';
+              : 'presupuestos';
 
             const cardContent = (
               <ThemedTouchable

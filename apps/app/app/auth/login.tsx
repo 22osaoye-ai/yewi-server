@@ -4,6 +4,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
+import * as AuthSession from 'expo-auth-session';
 import { useSignIn, useSSO, useAuth, useUser } from '@clerk/expo';
 import { ThemedTouchable } from '@/components/ui/ThemedTouchable';
 import { CustomAlert } from '@/components/ui/CustomAlert';
@@ -11,11 +14,13 @@ import { AuthHeader } from '@/components/auth/AuthHeader';
 import { AuthInput } from '@/components/auth/AuthInput';
 import { AuthButton } from '@/components/auth/AuthButton';
 import { SocialAuthButtons } from '@/components/auth/SocialAuthButtons';
-import { useAuthStore } from '@/store/useAuthStore';
+import { useAuthStore, UserProfile } from '@/store/useAuthStore';
 import { usePreferencesStore } from '@/store/usePreferencesStore';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { translateClerkError } from '@/utils/clerkErrorTranslator';
 import { biometricService } from '@/services/biometricService';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -49,6 +54,13 @@ export default function LoginScreen() {
   });
 
   useEffect(() => {
+    void WebBrowser.warmUpAsync();
+    return () => {
+      void WebBrowser.coolDownAsync();
+    };
+  }, []);
+
+  useEffect(() => {
     (async () => {
       const hasHardware = await biometricService.isHardwareSupported();
       const isEnrolled = await biometricService.isEnrolled();
@@ -72,8 +84,24 @@ export default function LoginScreen() {
       } else {
         router.replace('/(tabs)');
       }
+    } else if (isSignedIn) {
+      const email =
+        user?.primaryEmailAddress?.emailAddress ||
+        user?.emailAddresses?.[0]?.emailAddress ||
+        'usuario@yewi.app';
+      const fallbackUser: UserProfile = {
+        id: user?.id || 'clerk-user',
+        email,
+        firstName: user?.firstName || (email.includes('@') ? email.split('@')[0] : 'Usuario'),
+        lastName: user?.lastName || '',
+        roles: ['CLIENT'],
+        avatarUrl: user?.imageUrl,
+      };
+      useAuthStore.getState().setAuth(fallbackUser).then(() => {
+        router.replace('/(tabs)');
+      });
     }
-  }, [isAuthenticated, needsProfileCompletion, router]);
+  }, [isAuthenticated, isSignedIn, user, needsProfileCompletion, router]);
 
   useEffect(() => {
     const onBackPress = () => {
@@ -135,38 +163,132 @@ export default function LoginScreen() {
   };
 
   const handleGoogleButtonPress = async () => {
+    if (isLoading) return;
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
     setLoadingAction('google');
     try {
       if (isSignedIn && user) {
-        // Ya está iniciada la sesión en Clerk
-        if (isAuthenticated) {
-          router.replace('/(tabs)');
-          return;
-        }
+        // Ya está iniciada la sesión en Clerk: sincronizar y entrar inmediatamente
+        const email =
+          user.primaryEmailAddress?.emailAddress ||
+          user.emailAddresses?.[0]?.emailAddress ||
+          `${user.id}@clerk.user`;
+        const fallbackUser: UserProfile = {
+          id: user.id,
+          email,
+          firstName: user.firstName || 'Usuario',
+          lastName: user.lastName || '',
+          roles: ['CLIENT'],
+          avatarUrl: user.imageUrl,
+        };
+        await useAuthStore.getState().setAuth(fallbackUser);
+        setLoadingAction(null);
+        router.replace('/(tabs)');
+        return;
       }
 
-      const { createdSessionId, setActive } = await startSSOFlow({
+      // Descartar de forma segura cualquier sesión anterior huérfana del navegador
+      try {
+        WebBrowser.dismissAuthSession();
+      } catch {}
+
+      // Usar makeRedirectUri: genera exp:// en Expo Go y yewiapp:// en builds standalone
+      const redirectUrl = AuthSession.makeRedirectUri({ path: 'sso-callback' });
+      const res = await startSSOFlow({
         strategy: 'oauth_google',
+        redirectUrl,
       });
 
-      if (createdSessionId && setActive) {
-        await setActive({ session: createdSessionId });
+      const sessionId =
+        res.createdSessionId ??
+        res.signIn?.createdSessionId ??
+        res.signUp?.createdSessionId;
+
+      if (sessionId && res.setActive) {
+        await res.setActive({ session: sessionId });
+        const email =
+          user?.primaryEmailAddress?.emailAddress ||
+          user?.emailAddresses?.[0]?.emailAddress ||
+          (res.signIn as any)?.identifier ||
+          (res.signUp as any)?.emailAddress ||
+          'usuario@yewi.app';
+        const fallbackUser: UserProfile = {
+          id: user?.id || sessionId,
+          email,
+          firstName: user?.firstName || (email.includes('@') ? email.split('@')[0] : 'Usuario'),
+          lastName: user?.lastName || '',
+          roles: ['CLIENT'],
+          avatarUrl: user?.imageUrl,
+        };
+        await useAuthStore.getState().setAuth(fallbackUser);
+        setLoadingAction(null);
+        router.replace('/(tabs)');
+        return;
       } else {
         setLoadingAction(null);
       }
     } catch (err: any) {
       setLoadingAction(null);
       const rawMsg = (err?.message || '').toLowerCase();
+
+      // Si la sesión ya existe en Clerk
       if (
         rawMsg.includes('already signed') ||
         rawMsg.includes('session_already_exists') ||
         err?.errors?.[0]?.code === 'session_already_exists'
       ) {
-        // La sesión ya existe en Clerk; si ya está autenticado navegar, o dejar que ClerkAuthSync complete
-        if (isAuthenticated) {
-          router.replace('/(tabs)');
+        if (user) {
+          const email =
+            user.primaryEmailAddress?.emailAddress ||
+            user.emailAddresses?.[0]?.emailAddress ||
+            `${user.id}@clerk.user`;
+          const fallbackUser: UserProfile = {
+            id: user.id,
+            email,
+            firstName: user.firstName || 'Usuario',
+            lastName: user.lastName || '',
+            roles: ['CLIENT'],
+            avatarUrl: user.imageUrl,
+          };
+          await useAuthStore.getState().setAuth(fallbackUser);
         }
+        router.replace('/(tabs)');
+        return;
+      }
+
+      // Si expo-web-browser reporta invalid state o redirect handler huérfano de un intento previo
+      if (
+        rawMsg.includes('invalid state') ||
+        rawMsg.includes('redirect handler') ||
+        rawMsg.includes('already open')
+      ) {
+        console.warn('[Google SSO] Sesión de navegador en estado pendiente. Limpiando...');
+        try {
+          WebBrowser.dismissAuthSession();
+        } catch {}
+
+        if (isSignedIn && user) {
+          const email =
+            user.primaryEmailAddress?.emailAddress ||
+            user.emailAddresses?.[0]?.emailAddress ||
+            `${user.id}@clerk.user`;
+          const fallbackUser: UserProfile = {
+            id: user.id,
+            email,
+            firstName: user.firstName || 'Usuario',
+            lastName: user.lastName || '',
+            roles: ['CLIENT'],
+            avatarUrl: user.imageUrl,
+          };
+          await useAuthStore.getState().setAuth(fallbackUser);
+          router.replace('/(tabs)');
+          return;
+        }
+
+        showAlert(
+          'Sesión en curso',
+          'La ventana del navegador anterior se ha reiniciado. Por favor vuelve a pulsar Continuar con Google.'
+        );
         return;
       }
 

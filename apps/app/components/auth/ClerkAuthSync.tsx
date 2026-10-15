@@ -19,10 +19,12 @@ export function ClerkAuthSync() {
 
     if (isSignedIn && user) {
       const now = Date.now();
-      // Si ya se está sincronizando o se sincronizó hace menos de 30s para este usuario, no repetir
+      // Si ya está autenticado en Zustand y se sincronizó hace menos de 30s para este usuario, no repetir
       if (
         moduleIsSyncing ||
-        (moduleLastSyncedId === user.id && now - moduleLastSyncTime < 30000)
+        (useAuthStore.getState().isAuthenticated &&
+          moduleLastSyncedId === user.id &&
+          now - moduleLastSyncTime < 30000)
       ) {
         return;
       }
@@ -61,7 +63,9 @@ export function ClerkAuthSync() {
             googleAccount?.username ||
             (email.includes('@') ? email.split('@')[0].replace(/[._-]+/g, ' ') : '');
 
-          const token = await getToken().catch(() => null);
+          const tokenPromise = getToken().catch(() => null);
+          const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3500));
+          const token = await Promise.race([tokenPromise, timeoutPromise]);
 
           let backendUser: any = null;
           let accessToken: string | undefined = undefined;
@@ -96,7 +100,7 @@ export function ClerkAuthSync() {
             );
             useAuthStore.getState().setNeedsProfileCompletion(false);
           } else {
-            // Sesión autenticada en Clerk: configurar usuario real de Clerk sin token ficticio para evitar 401
+            // Sesión autenticada en Clerk: configurar usuario real de Clerk y guardar su JWT para llamadas API
             const fallbackUser: UserProfile = {
               id: user.id,
               email,
@@ -105,7 +109,7 @@ export function ClerkAuthSync() {
               roles: ['CLIENT'],
               avatarUrl: user.imageUrl || googleAccount?.avatarUrl,
             };
-            await useAuthStore.getState().setAuth(fallbackUser);
+            await useAuthStore.getState().setAuth(fallbackUser, token || undefined);
             useAuthStore.getState().setNeedsProfileCompletion(false);
           }
         } catch (e) {

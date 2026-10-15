@@ -149,9 +149,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 }));
 
-// Auto-register apiClient 401 callback to enforce logout and immediate redirect
-registerAuthFailureHandler(() => {
-  useAuthStore.getState().logout().catch(() => {});
+// Auto-register apiClient 401 callback: solo limpiar tokens expirados sin forzar logout global ni romper la navegación
+registerAuthFailureHandler(async () => {
+  await clearTokens();
 });
 
 // Run auth initialization on boot (guarded for SSR)

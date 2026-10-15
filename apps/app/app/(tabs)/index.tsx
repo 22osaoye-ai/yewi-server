@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -96,10 +96,15 @@ export default function HomeScreen() {
     }
   }, []);
 
+  const lastHomeFocusFetchRef = useRef(0);
   useFocusEffect(
     useCallback(() => {
-      fetchFeaturedProjects();
-      fetchPromotions();
+      const now = Date.now();
+      if (now - lastHomeFocusFetchRef.current > 45_000) {
+        lastHomeFocusFetchRef.current = now;
+        fetchFeaturedProjects();
+        fetchPromotions();
+      }
     }, [fetchFeaturedProjects, fetchPromotions])
   );
 

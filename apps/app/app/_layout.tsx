@@ -132,9 +132,16 @@ function RootNavigation({ isFontsReady }: { isFontsReady: boolean }) {
     if (isSignedIn && !isAuthenticated) return;
 
     const segList = segments as string[];
+    const inTabsGroup = segList[0] === '(tabs)';
+
+    // Si el usuario ya está autenticado y navegando dentro de (tabs), nunca interferir ni redirigir
+    if (inTabsGroup && (isAuthenticated || isSignedIn)) {
+      return;
+    }
+
     const inAuthGroup = segList[0] === 'auth';
     const isSsoCallback = segList[0] === 'sso-callback';
-    const isAtRoot = segList.length === 0 || segList[0] === 'index' || !segList[0];
+    const isAtRoot = segList.length === 1 && (segList[0] === 'index' || !segList[0]);
 
     const timeout = setTimeout(() => {
       if (isAuthenticated) {
@@ -142,13 +149,13 @@ function RootNavigation({ isFontsReady }: { isFontsReady: boolean }) {
           if (segList[1] !== 'complete-profile') {
             router.replace('/auth/complete-profile');
           }
-        } else if (inAuthGroup || isAtRoot) {
-          // If authenticated and on auth or onboarding root index, enter app
+        } else if (inAuthGroup || isAtRoot || isSsoCallback) {
+          // Si está autenticado y en auth, root o sso-callback, navegar a tabs
           router.replace('/(tabs)');
         }
       } else {
-        // Not authenticated: strictly redirect to /auth/login or onboarding
-        if (!inAuthGroup && !isSsoCallback) {
+        // No autenticado: redirigir a login u onboarding solo si no está en proceso de SSO ni firmado en Clerk ni en Zustand
+        if (!inAuthGroup && !isSsoCallback && !isSignedIn && !useAuthStore.getState().isAuthenticated) {
           if (hasSeenOnboarding) {
             router.replace('/auth/login');
           } else {

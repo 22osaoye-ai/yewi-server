@@ -28,35 +28,77 @@ import {
   ChatMessage,
   ConversationDetail,
   ConversationItem,
-  ContactItem,
   ChatParticipant,
 } from '@/services/chatApi';
-import { statusesApi, AuthorStatusFeedGroup } from '@/services/statusesApi';
 import { streamChatService } from '@/services/streamChatService';
 import { StreamChatView, isStreamNativeSupported } from '@/components/chat/StreamChatView';
 import { getRealtimeUrl, realtimeService } from '@/services/realtimeService';
 import { getAccessToken } from '@/services/apiClient';
 import { toast } from '@/store/useToastStore';
-import { useSeenStatusesStore } from '@/store/useSeenStatusesStore';
-import { StatusViewerModal } from '@/components/chat/StatusViewerModal';
 import { ChannelHeader } from '@/components/chat/ChannelHeader';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { MessageInputComposer } from '@/components/chat/MessageInputComposer';
 import { MessageReactionsBar } from '@/components/chat/MessageReactionsBar';
 import { ImageViewerModal } from '@/components/chat/ImageViewerModal';
 import { AttachmentMeta } from '@/services/chatApi';
+import { Skeleton } from '@/components/ui/Skeleton';
 import { useFavoritesStore } from '@/store/useFavoritesStore';
 import { useChatStore } from '@/store/useChatStore';
 
+function ChatSkeletonRow({ isDark }: { isDark: boolean }) {
+  const bg = isDark ? '#1C202C' : '#FFFFFF';
+  const border = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)';
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        borderRadius: 14,
+        backgroundColor: bg,
+        borderWidth: 1,
+        borderColor: border,
+        gap: 12,
+        marginBottom: 8,
+      }}
+    >
+      <Skeleton width={48} height={48} borderRadius={24} />
+      <View style={{ flex: 1, minWidth: 0, gap: 8 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Skeleton width={130} height={15} borderRadius={6} />
+          <Skeleton width={40} height={11} borderRadius={4} />
+        </View>
+        <Skeleton width="75%" height={12} borderRadius={5} />
+      </View>
+    </View>
+  );
+}
 
-type ChatTab = 'CHATS' | 'ESTADOS' | 'CONTACTOS';
+function MessageSkeletonFeed() {
+  return (
+    <View style={{ paddingHorizontal: 14, paddingVertical: 16, gap: 14 }}>
+      <View style={{ alignSelf: 'flex-start', maxWidth: '75%' }}>
+        <Skeleton width={180} height={42} borderRadius={18} />
+      </View>
+      <View style={{ alignSelf: 'flex-end', maxWidth: '75%' }}>
+        <Skeleton width={220} height={50} borderRadius={18} />
+      </View>
+      <View style={{ alignSelf: 'flex-start', maxWidth: '75%' }}>
+        <Skeleton width={150} height={38} borderRadius={18} />
+      </View>
+      <View style={{ alignSelf: 'flex-end', maxWidth: '75%' }}>
+        <Skeleton width={190} height={42} borderRadius={18} />
+      </View>
+    </View>
+  );
+}
 
 export default function ChatScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colors, isDark } = useAppTheme();
   const { user } = useAuthStore();
-  const isGroupSeen = useSeenStatusesStore((state) => state.isGroupSeen);
   const params = useLocalSearchParams<{
     id?: string;
     conversationId?: string;
@@ -77,22 +119,14 @@ export default function ChatScreen() {
       null,
   );
 
-  const [activeTab, setActiveTab] = useState<ChatTab>('CHATS');
-
   // Persistent Hub & Chat State from useChatStore (Zero reloads on tab switches or route transitions)
   const conversationsList = useChatStore((s) => s.conversations);
   const loadingConversations = useChatStore((s) => s.isConversationsLoading);
-  const storiesFeed = useChatStore((s) => s.storiesFeed);
-  const loadingStories = useChatStore((s) => s.isStoriesLoading);
-  const contactsList = useChatStore((s) => s.contacts);
-  const loadingContacts = useChatStore((s) => s.isContactsLoading);
   const isConversationLoading = useChatStore((s) => s.isConversationLoading);
   const conversationCache = useChatStore((s) => s.conversationCache);
   const isTypingByConv = useChatStore((s) => s.isTypingByConv);
 
   const fetchConversations = useChatStore((s) => s.fetchConversations);
-  const fetchStories = useChatStore((s) => s.fetchStories);
-  const fetchContacts = useChatStore((s) => s.fetchContacts);
   const fetchConversationDetail = useChatStore((s) => s.fetchConversationDetail);
   const addOptimisticMessage = useChatStore((s) => s.addOptimisticMessage);
   const replaceOptimisticMessage = useChatStore((s) => s.replaceOptimisticMessage);
@@ -110,9 +144,7 @@ export default function ChatScreen() {
     conversation?.conversationId && isTypingByConv[conversation.conversationId]
   );
 
-  const [selectedStoryGroup, setSelectedStoryGroup] = useState<AuthorStatusFeedGroup | null>(null);
   const isCurrentUserPro = isUserProfessional(user);
-  const [contactSearchQuery, setContactSearchQuery] = useState('');
   const [inputText, setInputText] = useState(params.initialMessage || '');
   const [isSending, setIsSending] = useState(false);
   const [errorConv, setErrorConv] = useState<string | null>(null);
@@ -131,6 +163,17 @@ export default function ChatScreen() {
     caption?: string | null;
   } | null>(null);
 
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+
+  const handleManualRefresh = useCallback(async () => {
+    setIsManualRefreshing(true);
+    try {
+      await fetchConversations(true);
+    } finally {
+      setIsManualRefreshing(false);
+    }
+  }, [fetchConversations]);
+
   const flatListRef = useRef<FlatList>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingEmittedRef = useRef<boolean>(false);
@@ -138,10 +181,6 @@ export default function ChatScreen() {
   // Back button handling
   useEffect(() => {
     const onBackPress = () => {
-      if (selectedStoryGroup) {
-        setSelectedStoryGroup(null);
-        return true;
-      }
       if (activeTargetId) {
         if (params.conversationId || params.id || params.targetUserId || params.orderId || params.requestId) {
           if (router.canGoBack()) {
@@ -159,7 +198,7 @@ export default function ChatScreen() {
 
     const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => backHandler.remove();
-  }, [selectedStoryGroup, activeTargetId, params, router]);
+  }, [activeTargetId, params, router]);
 
   // Stream Chat client & active channel state
   const [streamClient, setStreamClient] = useState<any>(null);
@@ -225,14 +264,12 @@ export default function ChatScreen() {
     initRealtimeObserver();
   }, [initRealtimeObserver]);
 
-  // Fetch Hub data using SWR (Cache-first: 0ms if already cached, no re-fetching on tab switches)
+  // Fetch Hub conversations on demand (0ms if cached, no redundant parallel fetches)
   useEffect(() => {
     if (!activeTargetId) {
       fetchConversations(false);
-      fetchStories(false);
-      fetchContacts(false);
     }
-  }, [activeTargetId, fetchConversations, fetchStories, fetchContacts]);
+  }, [activeTargetId, fetchConversations]);
 
   // Synchronize active conversation with global store so bottom tab bar knows when to hide
   useEffect(() => {
@@ -264,14 +301,6 @@ export default function ChatScreen() {
     }
   }, [activeTargetId, loadConversationDetail]);
 
-  // Keep selectedStoryGroup in sync if stories feed updates via socket
-  useEffect(() => {
-    if (!selectedStoryGroup) return;
-    const current = storiesFeed.find((g) => g.authorId === selectedStoryGroup.authorId);
-    if (current && current !== selectedStoryGroup) {
-      setSelectedStoryGroup(current);
-    }
-  }, [storiesFeed, selectedStoryGroup]);
 
   // Auto-scroll on new message arrivals
   useEffect(() => {
@@ -476,22 +505,6 @@ export default function ChatScreen() {
     [messages],
   );
 
-  const handleStartChatWithContact = (contact: ContactItem) => {
-    setActiveTargetId(contact.conversationId || contact.id);
-  };
-
-
-  // Filtered contacts
-  const filteredContacts = contactsList.filter((c) => {
-    if (!contactSearchQuery.trim()) return true;
-    const query = contactSearchQuery.toLowerCase();
-    return (
-      c.displayName?.toLowerCase().includes(query) ||
-      c.businessName?.toLowerCase().includes(query) ||
-      c.category?.toLowerCase().includes(query) ||
-      c.city?.toLowerCase().includes(query)
-    );
-  });
 
   const otherParticipant: ChatParticipant | undefined = conversation?.otherParticipant;
   const isOtherPro = Boolean(
@@ -811,9 +824,7 @@ export default function ChatScreen() {
 
           {/* 3. Messages Feed with Stream SDK Style Bubbles & Attachments */}
           {isLoadingConv ? (
-            <View style={styles.centerLoading}>
-              <ActivityIndicator size="large" color={colors.primary} />
-            </View>
+            <MessageSkeletonFeed />
           ) : errorConv ? (
             <View style={styles.centerLoading}>
               <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>{errorConv}</Text>
@@ -995,125 +1006,42 @@ export default function ChatScreen() {
           <Text style={[styles.hubMainTitle, { color: colors.textPrimary }]}>
             Mensajes
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <ThemedTouchable
-              onPress={() => setActiveTab('CONTACTOS')}
-              haptic="light"
-              style={[styles.headerIconBtn, { backgroundColor: colors.surfaceAlt }]}
-            >
-              <Ionicons name="create-outline" size={20} color={colors.primary} />
-            </ThemedTouchable>
-          </View>
-        </View>
-
-        {/* Modern Segmented Capsule Tab Bar (Home Page & Apple Design) */}
-        <View
-          style={[
-            styles.tabBarRow,
-            { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#F1F5F9' },
-          ]}
-        >
           <ThemedTouchable
-            onPress={() => setActiveTab('CHATS')}
+            onPress={() => router.push('/(tabs)/search')}
             haptic="light"
-            style={[
-              styles.tabItem,
-              activeTab === 'CHATS' && [
-                styles.activeTabItem,
-                { backgroundColor: isDark ? '#2D3548' : '#FFFFFF' },
-              ],
-            ]}
+            style={[styles.headerIconBtn, { backgroundColor: colors.surfaceAlt }]}
           >
-            <Text
-              style={[
-                styles.tabItemText,
-                { color: activeTab === 'CHATS' ? colors.textPrimary : colors.textSecondary },
-              ]}
-            >
-              CHATS
-            </Text>
-            {conversationsList.length > 0 && (
-              <View style={[styles.tabBadge, { backgroundColor: activeTab === 'CHATS' ? colors.primary : (isDark ? '#3F3F46' : '#E2E8F0') }]}>
-                <Text style={[styles.tabBadgeText, { color: activeTab === 'CHATS' ? '#FFFFFF' : colors.textSecondary }]}>
-                  {conversationsList.length}
-                </Text>
-              </View>
-            )}
-          </ThemedTouchable>
-
-          <ThemedTouchable
-            onPress={() => setActiveTab('ESTADOS')}
-            haptic="light"
-            style={[
-              styles.tabItem,
-              activeTab === 'ESTADOS' && [
-                styles.activeTabItem,
-                { backgroundColor: isDark ? '#2D3548' : '#FFFFFF' },
-              ],
-            ]}
-          >
-            <Text
-              style={[
-                styles.tabItemText,
-                { color: activeTab === 'ESTADOS' ? colors.textPrimary : colors.textSecondary },
-              ]}
-            >
-              ESTADOS
-            </Text>
-            {storiesFeed.length > 0 && (
-              <View style={[styles.tabBadge, { backgroundColor: activeTab === 'ESTADOS' ? colors.primary : (isDark ? '#3F3F46' : '#E2E8F0') }]}>
-                <Text style={[styles.tabBadgeText, { color: activeTab === 'ESTADOS' ? '#FFFFFF' : colors.textSecondary }]}>
-                  {storiesFeed.length}
-                </Text>
-              </View>
-            )}
-          </ThemedTouchable>
-
-          <ThemedTouchable
-            onPress={() => setActiveTab('CONTACTOS')}
-            haptic="light"
-            style={[
-              styles.tabItem,
-              activeTab === 'CONTACTOS' && [
-                styles.activeTabItem,
-                { backgroundColor: isDark ? '#2D3548' : '#FFFFFF' },
-              ],
-            ]}
-          >
-            <Text
-              style={[
-                styles.tabItemText,
-                { color: activeTab === 'CONTACTOS' ? colors.textPrimary : colors.textSecondary },
-              ]}
-            >
-              CONTACTOS
-            </Text>
-            {contactsList.length > 0 && (
-              <View style={[styles.tabBadge, { backgroundColor: activeTab === 'CONTACTOS' ? colors.primary : (isDark ? '#3F3F46' : '#E2E8F0') }]}>
-                <Text style={[styles.tabBadgeText, { color: activeTab === 'CONTACTOS' ? '#FFFFFF' : colors.textSecondary }]}>
-                  {contactsList.length}
-                </Text>
-              </View>
-            )}
+            <Ionicons name="search-outline" size={20} color={colors.primary} />
           </ThemedTouchable>
         </View>
       </View>
 
-      {/* Tab 1: CHATS */}
-      {activeTab === 'CHATS' && (
-        <View style={{ flex: 1 }}>
-          <FlatList
-            data={conversationsList}
-            keyExtractor={(item) => item.id}
-            refreshControl={
-              <RefreshControl
-                refreshing={loadingConversations}
-                onRefresh={() => fetchConversations(true)}
-                tintColor={colors.primary}
-              />
+      {/* Conversations List */}
+      <View style={{ flex: 1 }}>
+        <FlatList
+          data={conversationsList}
+          keyExtractor={(item) => item.id}
+          refreshControl={
+            <RefreshControl
+              refreshing={isManualRefreshing}
+              onRefresh={handleManualRefresh}
+              tintColor={colors.primary}
+            />
+          }
+          contentContainerStyle={{ paddingVertical: 8, paddingBottom: Math.max(insets.bottom + 85, 110) }}
+          ListEmptyComponent={() => {
+            if (loadingConversations) {
+              return (
+                <View style={{ paddingVertical: 4 }}>
+                  <ChatSkeletonRow isDark={isDark} />
+                  <ChatSkeletonRow isDark={isDark} />
+                  <ChatSkeletonRow isDark={isDark} />
+                  <ChatSkeletonRow isDark={isDark} />
+                  <ChatSkeletonRow isDark={isDark} />
+                </View>
+              );
             }
-            contentContainerStyle={{ paddingVertical: 8, paddingBottom: Math.max(insets.bottom + 85, 110) }}
-            ListEmptyComponent={() => (
+            return (
               <View style={styles.emptyContainer}>
                 <View style={[styles.emptyIconCircle, { backgroundColor: colors.primaryLight }]}>
                   <Ionicons name="chatbubbles-outline" size={44} color={colors.primary} />
@@ -1125,292 +1053,32 @@ export default function ChatScreen() {
                   Conecta con profesionales verificados o clientes desde el directorio para empezar a chatear en tiempo real.
                 </Text>
                 <ThemedTouchable
-                  onPress={() => setActiveTab('CONTACTOS')}
+                  onPress={() => router.push('/(tabs)/search')}
                   haptic="medium"
                   style={[styles.emptyBtn, { backgroundColor: colors.primary }]}
                 >
-                  <Ionicons name="person-add" size={16} color="#FFFFFF" />
-                  <Text style={styles.emptyBtnText}>Explorar Contactos</Text>
+                  <Ionicons name="search" size={16} color="#FFFFFF" />
+                  <Text style={styles.emptyBtnText}>Explorar</Text>
                 </ThemedTouchable>
               </View>
-            )}
-            renderItem={({ item }) => {
-              const other = item.otherParticipant;
-              const lastMsg = item.messages?.[0];
+            );
+          }}
+          renderItem={({ item }) => {
+            const other = item.otherParticipant;
+            const lastMsg = item.messages?.[0];
 
-              const timeFormatted = (() => {
-                try {
-                  const date = new Date(item.lastMessageAt || item.updatedAt);
-                  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                } catch {
-                  return '';
-                }
-              })();
-
-              return (
-                <ThemedTouchable
-                  onPress={() => setActiveTargetId(item.id)}
-                  haptic="light"
-                  style={[
-                    styles.chatCardItem,
-                    {
-                      backgroundColor: isDark ? '#1C202C' : '#FFFFFF',
-                      borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
-                    },
-                  ]}
-                >
-                  <View style={styles.chatAvatarWrap}>
-                    {other?.avatarUrl ? (
-                      <Image source={{ uri: other.avatarUrl }} style={styles.chatAvatar} contentFit="cover" />
-                    ) : (
-                      <View style={[styles.chatAvatarPlaceholder, { backgroundColor: colors.primaryLight }]}>
-                        <Text style={[styles.chatInitial, { color: colors.primary }]}>
-                          {(other?.displayName || 'U').charAt(0).toUpperCase()}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={[styles.chatOnlineDot, { borderColor: isDark ? '#1C202C' : '#FFFFFF' }]} />
-                    {other?.isPro && (
-                      <View style={styles.chatProBadge}>
-                        <Ionicons name="checkmark" size={7} color="#FFFFFF" />
-                      </View>
-                    )}
-                  </View>
-
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <View style={styles.chatNameRow}>
-                      <Text numberOfLines={1} style={[styles.chatNameText, { color: colors.textPrimary }]}>
-                        {other?.displayName || 'Conversación Yewi'}
-                      </Text>
-                      <Text style={[styles.chatTimeText, { color: colors.textMuted }]}>
-                        {timeFormatted}
-                      </Text>
-                    </View>
-
-                    <View style={styles.chatSnippetRow}>
-                      <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.chatSnippetText, { color: colors.textSecondary }]}>
-                        {lastMsg?.content || 'Pulsa para ver los mensajes'}
-                      </Text>
-                      {item.order && (
-                        <View style={[styles.orderTag, { backgroundColor: isDark ? 'rgba(2, 132, 199, 0.2)' : '#E0F2FE' }]}>
-                          <Text style={[styles.orderTagText, { color: '#0284C7' }]}>
-                            Pedido
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                </ThemedTouchable>
-              );
-            }}
-          />
-
-          {/* Floating Action Button for New Chat */}
-          <ThemedTouchable
-            onPress={() => setActiveTab('CONTACTOS')}
-            haptic="medium"
-            style={[styles.floatingActionBtn, { backgroundColor: colors.primary }]}
-          >
-            <Ionicons name="chatbubble-ellipses" size={24} color="#FFFFFF" />
-          </ThemedTouchable>
-        </View>
-      )}
-
-      {/* Tab 2: ESTADOS */}
-      {activeTab === 'ESTADOS' && (
-        <View style={{ flex: 1 }}>
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            refreshControl={
-              <RefreshControl
-                refreshing={loadingStories}
-                onRefresh={() => fetchStories(true)}
-                tintColor={colors.primary}
-              />
-            }
-            contentContainerStyle={{ paddingVertical: 14, paddingBottom: Math.max(insets.bottom + 85, 110) }}
-          >
-            {/* Estados Recientes & Vistos */}
-            {(() => {
-              const recentStories = storiesFeed.filter((g) => !isGroupSeen(g.statuses.map((s) => s.id)));
-              const seenStories = storiesFeed.filter((g) => isGroupSeen(g.statuses.map((s) => s.id)));
-
-              if (storiesFeed.length === 0) {
-                return (
-                  <View style={styles.emptyStoriesContainer}>
-                    <Ionicons name="sparkles-outline" size={36} color={colors.textMuted} />
-                    <Text style={[styles.emptyStoriesTitle, { color: colors.textPrimary }]}>
-                      No hay estados recientes
-                    </Text>
-                    <Text style={[styles.emptyStoriesSubtitle, { color: colors.textSecondary }]}>
-                      Los profesionales con Yewi Pro compartirán aquí sus reformas y fotos de trabajos activos.
-                    </Text>
-                  </View>
-                );
+            const timeFormatted = (() => {
+              try {
+                const date = new Date(item.lastMessageAt || item.updatedAt);
+                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+              } catch {
+                return '';
               }
+            })();
 
-              return (
-                <>
-                  {/* 1. Recientes */}
-                  {recentStories.length > 0 && (
-                    <>
-                      <View style={styles.storiesSectionHeader}>
-                        <Text style={[styles.storiesSectionTitle, { color: colors.textMuted }]}>
-                          ACTUALIZACIONES RECIENTES ({recentStories.length})
-                        </Text>
-                      </View>
-                      {recentStories.map((group) => (
-                        <ThemedTouchable
-                          key={group.authorId}
-                          onPress={() => setSelectedStoryGroup(group)}
-                          haptic="medium"
-                          style={[
-                            styles.chatCardItem,
-                            {
-                              backgroundColor: isDark ? '#1C202C' : '#FFFFFF',
-                              borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
-                            },
-                          ]}
-                        >
-                          <View style={[styles.storyRingWrap, { borderColor: colors.primary, borderWidth: 2 }]}>
-                            {group.authorAvatar ? (
-                              <Image source={{ uri: group.authorAvatar }} style={styles.storyRowAvatar} contentFit="cover" />
-                            ) : (
-                              <View style={[styles.storyRowPlaceholder, { backgroundColor: colors.primaryLight }]}>
-                                <Text style={{ fontSize: 16, fontFamily: 'PlusJakartaSans-Bold', color: colors.primary }}>
-                                  {(group.businessName || group.authorName).charAt(0).toUpperCase()}
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <Text numberOfLines={1} style={[styles.chatNameText, { color: colors.textPrimary }]}>
-                                {group.businessName || group.authorName}
-                              </Text>
-                              {group.isPro && (
-                                <View style={styles.proChipSmall}>
-                                  <Text style={styles.proChipSmallText}>PRO</Text>
-                                </View>
-                              )}
-                            </View>
-                            <Text numberOfLines={1} style={[styles.storyRowCategory, { color: colors.textSecondary }]}>
-                              {group.category || 'Profesional'} · {group.statuses.length} {group.statuses.length === 1 ? 'estado' : 'estados'}
-                            </Text>
-                          </View>
-                        </ThemedTouchable>
-                      ))}
-                    </>
-                  )}
-
-                  {/* 2. Vistos */}
-                  {seenStories.length > 0 && (
-                    <>
-                      <View style={[styles.storiesSectionHeader, { marginTop: recentStories.length > 0 ? 14 : 0 }]}>
-                        <Text style={[styles.storiesSectionTitle, { color: colors.textMuted }]}>
-                          ACTUALIZACIONES VISTAS ({seenStories.length})
-                        </Text>
-                      </View>
-                      {seenStories.map((group) => (
-                        <ThemedTouchable
-                          key={group.authorId}
-                          onPress={() => setSelectedStoryGroup(group)}
-                          haptic="medium"
-                          style={[
-                            styles.chatCardItem,
-                            {
-                              backgroundColor: isDark ? '#1C202C' : '#FFFFFF',
-                              borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.05)',
-                              opacity: 0.85,
-                            },
-                          ]}
-                        >
-                          <View style={[styles.storyRingWrap, { borderColor: isDark ? '#3F3F46' : '#CBD5E1', borderWidth: 1.5 }]}>
-                            {group.authorAvatar ? (
-                              <Image source={{ uri: group.authorAvatar }} style={styles.storyRowAvatar} contentFit="cover" />
-                            ) : (
-                              <View style={[styles.storyRowPlaceholder, { backgroundColor: colors.primaryLight }]}>
-                                <Text style={{ fontSize: 16, fontFamily: 'PlusJakartaSans-Bold', color: colors.primary }}>
-                                  {(group.businessName || group.authorName).charAt(0).toUpperCase()}
-                                </Text>
-                              </View>
-                            )}
-                          </View>
-
-                          <View style={{ flex: 1, minWidth: 0 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <Text numberOfLines={1} style={[styles.chatNameText, { color: colors.textPrimary }]}>
-                                {group.businessName || group.authorName}
-                              </Text>
-                              {group.isPro && (
-                                <View style={styles.proChipSmall}>
-                                  <Text style={styles.proChipSmallText}>PRO</Text>
-                                </View>
-                              )}
-                            </View>
-                            <Text numberOfLines={1} style={[styles.storyRowCategory, { color: colors.textSecondary }]}>
-                              {group.category || 'Profesional'} · {group.statuses.length} {group.statuses.length === 1 ? 'estado' : 'estados'}
-                            </Text>
-                          </View>
-                        </ThemedTouchable>
-                      ))}
-                    </>
-                  )}
-                </>
-              );
-            })()}
-          </ScrollView>
-        </View>
-      )}
-
-      {/* Tab 3: CONTACTOS */}
-      {activeTab === 'CONTACTOS' && (
-        <View style={{ flex: 1 }}>
-          {/* Search Box */}
-          <View style={[styles.contactSearchWrap, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
-            <Ionicons name="search" size={18} color={colors.textMuted} />
-            <TextInput
-              value={contactSearchQuery}
-              onChangeText={setContactSearchQuery}
-              placeholder="Buscar por nombre, categoría o ciudad..."
-              placeholderTextColor={colors.textMuted}
-              style={[styles.contactSearchInput, { color: colors.textPrimary }]}
-            />
-            {Boolean(contactSearchQuery) && (
-              <ThemedTouchable onPress={() => setContactSearchQuery('')} haptic="light">
-                <Ionicons name="close-circle" size={18} color={colors.textMuted} />
-              </ThemedTouchable>
-            )}
-          </View>
-
-          <FlatList
-            data={filteredContacts}
-            keyExtractor={(item) => item.id}
-            refreshControl={
-              <RefreshControl
-                refreshing={loadingContacts}
-                onRefresh={() => fetchContacts(true)}
-                tintColor={colors.primary}
-              />
-            }
-            contentContainerStyle={{ paddingVertical: 8, paddingBottom: Math.max(insets.bottom + 85, 110) }}
-            ListEmptyComponent={() => (
-              <View style={styles.emptyContainer}>
-                <Ionicons name="people-outline" size={44} color={colors.textMuted} />
-                <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-                  {contactSearchQuery ? 'Sin resultados para la búsqueda' : 'No hay contactos disponibles'}
-                </Text>
-                <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
-                  {contactSearchQuery
-                    ? 'Intenta buscar con otros términos.'
-                    : 'Explora profesionales en el buscador o publica una solicitud para conectar con especialistas.'}
-                </Text>
-              </View>
-            )}
-            renderItem={({ item }) => (
+            return (
               <ThemedTouchable
-                onPress={() => handleStartChatWithContact(item)}
+                onPress={() => setActiveTargetId(item.id)}
                 haptic="light"
                 style={[
                   styles.chatCardItem,
@@ -1420,74 +1088,61 @@ export default function ChatScreen() {
                   },
                 ]}
               >
-                <View style={styles.contactAvatarWrap}>
-                  {item.avatarUrl ? (
-                    <Image source={{ uri: item.avatarUrl }} style={styles.contactAvatar} contentFit="cover" />
+                <View style={styles.chatAvatarWrap}>
+                  {other?.avatarUrl ? (
+                    <Image source={{ uri: other.avatarUrl }} style={styles.chatAvatar} contentFit="cover" />
                   ) : (
-                    <View style={[styles.contactAvatarPlaceholder, { backgroundColor: colors.primaryLight }]}>
-                      <Text style={[styles.contactInitial, { color: colors.primary }]}>
-                        {item.displayName.charAt(0).toUpperCase()}
+                    <View style={[styles.chatAvatarPlaceholder, { backgroundColor: colors.primaryLight }]}>
+                      <Text style={[styles.chatInitial, { color: colors.primary }]}>
+                        {(other?.displayName || 'U').charAt(0).toUpperCase()}
                       </Text>
                     </View>
                   )}
-                  {item.isPro && (
-                    <View style={styles.contactProBadge}>
+                  <View style={[styles.chatOnlineDot, { borderColor: isDark ? '#1C202C' : '#FFFFFF' }]} />
+                  {other?.isPro && (
+                    <View style={styles.chatProBadge}>
                       <Ionicons name="checkmark" size={7} color="#FFFFFF" />
                     </View>
                   )}
                 </View>
 
                 <View style={{ flex: 1, minWidth: 0 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text numberOfLines={1} style={[styles.contactName, { color: colors.textPrimary }]}>
-                      {item.displayName}
+                  <View style={styles.chatNameRow}>
+                    <Text numberOfLines={1} style={[styles.chatNameText, { color: colors.textPrimary }]}>
+                      {other?.displayName || 'Conversación Yewi'}
                     </Text>
-                    {item.rating > 0 && (
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                        <Ionicons name="star" size={12} color="#10B981" />
-                        <Text style={{ fontSize: 12, fontFamily: 'PlusJakartaSans-Bold', color: colors.textPrimary }}>
-                          {item.rating.toFixed(1)}
+                    <Text style={[styles.chatTimeText, { color: colors.textMuted }]}>
+                      {timeFormatted}
+                    </Text>
+                  </View>
+
+                  <View style={styles.chatSnippetRow}>
+                    <Text numberOfLines={1} ellipsizeMode="tail" style={[styles.chatSnippetText, { color: colors.textSecondary }]}>
+                      {lastMsg?.content || 'Pulsa para ver los mensajes'}
+                    </Text>
+                    {item.order && (
+                      <View style={[styles.orderTag, { backgroundColor: isDark ? 'rgba(2, 132, 199, 0.2)' : '#E0F2FE' }]}>
+                        <Text style={[styles.orderTagText, { color: '#0284C7' }]}>
+                          Pedido
                         </Text>
                       </View>
                     )}
                   </View>
-
-                  <Text numberOfLines={1} style={[styles.contactCategory, { color: colors.textSecondary }]}>
-                    {item.category ? `${item.category} · ` : ''}{item.city || 'España'}
-                  </Text>
                 </View>
-
-                <ThemedTouchable
-                  onPress={() => handleStartChatWithContact(item)}
-                  haptic="medium"
-                  style={[styles.startChatBtn, { backgroundColor: colors.primary }]}
-                >
-                  <Ionicons name="chatbubble" size={13} color="#FFFFFF" />
-                  <Text style={styles.startChatBtnText}>Chatear</Text>
-                </ThemedTouchable>
               </ThemedTouchable>
-            )}
-          />
-        </View>
-      )}
+            );
+          }}
+        />
 
-      {/* Modals for Stories */}
-      <StatusViewerModal
-        visible={Boolean(selectedStoryGroup)}
-        storyGroup={selectedStoryGroup}
-        onClose={() => setSelectedStoryGroup(null)}
-        onStoryUpdated={() => {
-          fetchStories(true);
-          fetchConversations(true);
-        }}
-        onOpenChatWithUser={(targetUserId, targetName, initialMsg) => {
-          setSelectedStoryGroup(null);
-          if (initialMsg) {
-            setInputText(initialMsg);
-          }
-          setActiveTargetId(targetUserId);
-        }}
-      />
+        {/* Floating Action Button for New Chat / Discover */}
+        <ThemedTouchable
+          onPress={() => router.push('/(tabs)/search')}
+          haptic="medium"
+          style={[styles.floatingActionBtn, { backgroundColor: colors.primary }]}
+        >
+          <Ionicons name="create-outline" size={24} color="#FFFFFF" />
+        </ThemedTouchable>
+      </View>
     </View>
   );
 }
