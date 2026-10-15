@@ -1,9 +1,11 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
   Optional,
+  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
@@ -31,6 +33,7 @@ import { PaymentsService } from '../payments/payments.service';
 export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => PaymentsService))
     private readonly paymentsService: PaymentsService,
     @Optional() private readonly realtime?: RealtimeService,
     @Optional() private readonly configService?: ConfigService,
